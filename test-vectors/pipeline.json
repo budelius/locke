@@ -1,0 +1,89 @@
+{
+  "description": "Test vectors for credential resolution pipeline priority and fallback behavior",
+  "vectors": [
+    {
+      "name": "keystore-wins",
+      "description": "Keystore has the credential, should be returned regardless of env var",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": "keystore-value",
+        "env_var": "env-value",
+        "gitlab_cli": null,
+        "dotenv": null
+      },
+      "environment": "development",
+      "expected_value": "keystore-value",
+      "expected_source": "keystore"
+    },
+    {
+      "name": "env-fallback",
+      "description": "Keystore empty, env var should be used",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": null,
+        "env_var": "env-value",
+        "gitlab_cli": null,
+        "dotenv": null
+      },
+      "environment": "development",
+      "expected_value": "env-value",
+      "expected_source": "env_var"
+    },
+    {
+      "name": "glab-fallback",
+      "description": "Keystore and env var empty, glab should be used",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": null,
+        "env_var": null,
+        "gitlab_cli": "glab-value",
+        "dotenv": null
+      },
+      "environment": "development",
+      "expected_value": "glab-value",
+      "expected_source": "gitlab_cli"
+    },
+    {
+      "name": "dotenv-fallback-dev",
+      "description": "All other backends empty, .env should work in development",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": null,
+        "env_var": null,
+        "gitlab_cli": null,
+        "dotenv": "dotenv-value"
+      },
+      "environment": "development",
+      "expected_value": "dotenv-value",
+      "expected_source": "dotenv"
+    },
+    {
+      "name": "production-fail",
+      "description": "In production, all backends empty should raise CredentialNotFoundError. dotenv is NOT searched.",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": null,
+        "env_var": null,
+        "gitlab_cli": null,
+        "dotenv": "dotenv-value"
+      },
+      "environment": "production",
+      "expected_error": "CredentialNotFoundError",
+      "expected_backends_searched": ["keystore", "env_var", "gitlab_cli"]
+    },
+    {
+      "name": "dev-all-empty",
+      "description": "In development, all backends empty should raise CredentialNotFoundError",
+      "credential_name": "TEST_SECRET",
+      "backends": {
+        "keystore": null,
+        "env_var": null,
+        "gitlab_cli": null,
+        "dotenv": null
+      },
+      "environment": "development",
+      "expected_error": "CredentialNotFoundError",
+      "expected_backends_searched": ["keystore", "env_var", "gitlab_cli", "dotenv"]
+    }
+  ]
+}

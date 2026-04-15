@@ -1,0 +1,105 @@
+{
+  "description": "Test vectors for config flattening to SCREAMING_SNAKE_CASE",
+  "vectors": [
+    {
+      "name": "basic-nested",
+      "description": "Standard nested config flattening",
+      "input": {
+        "mongo": {
+          "uri": "mongodb://localhost:27017"
+        },
+        "sentry": {
+          "dsn": "https://sentry.example.com"
+        }
+      },
+      "expected": {
+        "MONGO_URI": "mongodb://localhost:27017",
+        "SENTRY_DSN": "https://sentry.example.com"
+      }
+    },
+    {
+      "name": "deep-nesting",
+      "description": "Three levels deep",
+      "input": {
+        "database": {
+          "primary": {
+            "host": "localhost",
+            "port": "5432"
+          }
+        }
+      },
+      "expected": {
+        "DATABASE_PRIMARY_HOST": "localhost",
+        "DATABASE_PRIMARY_PORT": "5432"
+      }
+    },
+    {
+      "name": "flat-input",
+      "description": "Already flat config",
+      "input": {
+        "api_key": "abc123",
+        "debug": "true"
+      },
+      "expected": {
+        "API_KEY": "abc123",
+        "DEBUG": "true"
+      }
+    },
+    {
+      "name": "alphabetical-ordering",
+      "description": "Keys must be sorted alphabetically",
+      "input": {
+        "zebra": {"value": "z"},
+        "alpha": {"value": "a"},
+        "middle": {"value": "m"}
+      },
+      "expected_keys_order": ["ALPHA_VALUE", "MIDDLE_VALUE", "ZEBRA_VALUE"]
+    },
+    {
+      "name": "numeric-values",
+      "description": "Numeric values are converted to strings",
+      "input": {
+        "server": {
+          "port": 8080,
+          "workers": 4
+        }
+      },
+      "expected": {
+        "SERVER_PORT": "8080",
+        "SERVER_WORKERS": "4"
+      }
+    },
+    {
+      "name": "collision-error",
+      "description": "Two paths producing the same key should raise CollisionError",
+      "input": {
+        "mongo_uri": "value1",
+        "mongo": {
+          "uri": "value2"
+        }
+      },
+      "expected_error": "CollisionError",
+      "expected_collision_key": "MONGO_URI"
+    },
+    {
+      "name": "empty-config",
+      "description": "Empty config produces empty result",
+      "input": {},
+      "expected": {}
+    },
+    {
+      "name": "boolean-values",
+      "description": "Boolean values are converted to strings",
+      "input": {
+        "feature": {
+          "enabled": true,
+          "debug": false
+        }
+      },
+      "expected": {
+        "FEATURE_ENABLED": "True",
+        "FEATURE_DEBUG": "False"
+      }
+    }
+  ]
+}

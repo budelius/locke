@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "project": "",
+  "tenant": "default",
+  "keyName": "",
+  "encryptedConfigPath": "./config.encrypted.json",
+  "classificationRules": [
+    { "pattern": "*_URI", "destination": "config", "confidence": "default" },
+    { "pattern": "*_DSN", "destination": "config", "confidence": "default" },
+    { "pattern": "*_HOST", "destination": "config", "confidence": "default" },
+    { "pattern": "*_PORT", "destination": "config", "confidence": "default" },
+    { "pattern": "*_URL", "destination": "config", "confidence": "default" },
+    { "pattern": "*_API_KEY", "destination": "vault", "confidence": "default" },
+    { "pattern": "*_TOKEN", "destination": "vault", "confidence": "default" },
+    { "pattern": "*_SECRET", "destination": "vault", "confidence": "default" },
+    { "pattern": "PERSONAL_*", "destination": "vault", "confidence": "default" }
+  ],
+  "keys": {
+    "_comment": "Registry of all keys this project uses, where they live, and what they're for.",
+    "keystore": {
+      "_comment": "Credentials stored in OS keystore (service='locke'). Retrieved via locke keystore get.",
+      "EXAMPLE_CONFIG_ENCRYPTION_KEY": "Decrypts config.encrypted.*.json for this project"
+    },
+    "encryptedConfig": {
+      "_comment": "Keys inside the encrypted config file. Flattened to SCREAMING_SNAKE_CASE env vars at runtime.",
+      "mongo.uri": "MongoDB connection string",
+      "sentry.dsn": "Sentry error-tracking DSN"
+    },
+    "vault": {
+      "_comment": "Per-developer secrets in Vaultwarden. Path format: {project}/{tenant}/{name}.",
+      "{project}/{tenant}/personal_api_key": "Personal API key for external service",
+      "{project}/{tenant}/deploy_token": "GitLab deploy token"
+    },
+    "env": {
+      "_comment": "Plain environment variables (non-secret config). Set in .env or deployment.",
+      "NODE_ENV": "Runtime environment (development|staging|production)"
+    }
+  }
+}

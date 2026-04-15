@@ -1,0 +1,13 @@
+{
+  "description": "Per-developer secrets stored in Vaultwarden. Each developer retrieves these from their personal vault.",
+  "secrets": [
+    {
+      "path": "{project}/{tenant}/personal_api_key",
+      "description": "Personal API key for external service"
+    },
+    {
+      "path": "{project}/{tenant}/deploy_token",
+      "description": "GitLab deploy token"
+    }
+  ]
+}

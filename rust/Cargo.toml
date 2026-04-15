@@ -1,0 +1,35 @@
+[package]
+name = "locke"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Unified credentials framework — encrypted config, OS keystore, Vaultwarden integration"
+license = "MIT"
+repository = "https://gitlab.com/martin-wieser/locke"
+
+[[bin]]
+name = "locke"
+path = "src/cli/main.rs"
+
+[lib]
+name = "locke"
+path = "src/lib.rs"
+
+[dependencies]
+keyring = "3"
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+getrandom = "0.2"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"

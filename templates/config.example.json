@@ -1,0 +1,12 @@
+{
+  "mongo": {
+    "uri": "mongodb://localhost:27017/mydb"
+  },
+  "sentry": {
+    "dsn": "https://examplePublicKey@o0.ingest.sentry.io/0"
+  },
+  "cdn": {
+    "url": "https://cdn.example.com",
+    "api_key": "your-cdn-api-key"
+  }
+}

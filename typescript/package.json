@@ -1,0 +1,35 @@
+{
+  "name": "locke",
+  "version": "0.1.0",
+  "author": "",
+  "keywords": ["credentials", "secrets", "encryption", "keystore", "vaultwarden", "aes-gcm"],
+  "description": "Unified credentials framework — encrypted config, OS keystore, Vaultwarden integration",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/martin-wieser/locke.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "locke": "dist/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "keytar": "^7.9.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
