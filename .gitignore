@@ -16,6 +16,10 @@ venv/
 node_modules/
 typescript/dist/
 *.tsbuildinfo
+# Yarn Berry (PnP + cache)
+.yarn/
+.pnp.*
+yarn.lock
 
 # Rust
 rust/target/
