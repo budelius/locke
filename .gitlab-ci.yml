@@ -48,9 +48,9 @@ publish:
     # Publish to PyPI (tagged releases only)
     - |
       if [ -n "$CI_COMMIT_TAG" ] && [ -n "$PYPI_API_TOKEN" ]; then
-        TWINE_PASSWORD=${PYPI_API_TOKEN}
-        TWINE_USERNAME=__token__
-        twine upload dist/*
+        export TWINE_PASSWORD="${PYPI_API_TOKEN}"
+        export TWINE_USERNAME=__token__
+        twine upload --non-interactive dist/*
       fi
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
