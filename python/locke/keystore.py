@@ -47,6 +47,117 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "locke"
 
+
+# ---------------------------------------------------------------------------
+# Direct Windows Credential Manager access (bypasses keyring naming)
+# ---------------------------------------------------------------------------
+# The ``keyring`` library constructs target names as ``{service}/{username}``,
+# but credentials stored by other tools (or earlier conventions) may use bare
+# target names like ``{project}`` or ``config-encryption-key@{project}``.
+# This helper reads credentials by their exact target name via the Win32
+# CredRead API.
+
+def _wincred_read_by_target(target: str) -> str | None:
+    """Read a credential from Windows Credential Manager by exact target name.
+
+    Bypasses keyring's ``{service}/{username}`` naming convention to access
+    credentials stored under bare target names.
+
+    Returns the credential password (CredentialBlob) as a string, or None.
+    Windows-only; returns None on other platforms.
+    """
+    if platform.system() != "Windows":
+        return None
+
+    import ctypes
+    import ctypes.wintypes
+
+    CRED_TYPE_GENERIC = 1
+
+    class FILETIME(ctypes.Structure):
+        _fields_ = [("dwLowDateTime", ctypes.wintypes.DWORD),
+                     ("dwHighDateTime", ctypes.wintypes.DWORD)]
+
+    class CREDENTIAL(ctypes.Structure):
+        _fields_ = [
+            ("Flags", ctypes.wintypes.DWORD),
+            ("Type", ctypes.wintypes.DWORD),
+            ("TargetName", ctypes.wintypes.LPWSTR),
+            ("Comment", ctypes.wintypes.LPWSTR),
+            ("LastWritten", FILETIME),
+            ("CredentialBlobSize", ctypes.wintypes.DWORD),
+            ("CredentialBlob", ctypes.POINTER(ctypes.c_byte)),
+            ("Persist", ctypes.wintypes.DWORD),
+            ("AttributeCount", ctypes.wintypes.DWORD),
+            ("Attributes", ctypes.c_void_p),
+            ("TargetAlias", ctypes.wintypes.LPWSTR),
+            ("UserName", ctypes.wintypes.LPWSTR),
+        ]
+
+    advapi32 = ctypes.windll.advapi32
+    advapi32.CredReadW.argtypes = [
+        ctypes.wintypes.LPCWSTR,
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.DWORD,
+        ctypes.POINTER(ctypes.POINTER(CREDENTIAL)),
+    ]
+    advapi32.CredReadW.restype = ctypes.wintypes.BOOL
+    advapi32.CredFree.argtypes = [ctypes.c_void_p]
+    advapi32.CredFree.restype = None
+
+    pcred = ctypes.POINTER(CREDENTIAL)()
+
+    if not advapi32.CredReadW(target, CRED_TYPE_GENERIC, 0, ctypes.byref(pcred)):
+        return None
+
+    try:
+        cred = pcred.contents
+        if cred.CredentialBlobSize == 0:
+            return None
+        blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
+        return blob.decode("utf-16-le")
+    finally:
+        advapi32.CredFree(pcred)
+
+
+# ---------------------------------------------------------------------------
+# Legacy credential naming (migration support)
+# ---------------------------------------------------------------------------
+# Older credential-management tools stored secrets using the project name as
+# the service/target and a short credential name as the username. Locke
+# unifies under service="locke" with UPPER_SNAKE_CASE names. The patterns
+# below describe legacy naming conventions Locke can still read so users can
+# migrate without losing credentials.
+#
+# Legacy patterns (target → username):
+#   "{project}"                        → "config-encryption-key" | "config_encryption_key"
+#   "config-encryption-key@{project}"  → "config-encryption-key"
+#   "locke-bio"                        → "LOCKE_VAULT_PASSWORD"  (older locke versions)
+
+_LEGACY_KEY_SUFFIX = "_CONFIG_ENCRYPTION_KEY"
+
+_LEGACY_VAULT_PASSWORD_PATTERNS: list[tuple[str, str]] = [
+    ("locke-bio", "LOCKE_VAULT_PASSWORD"),
+]
+
+
+def _legacy_lookups_for(name: str) -> list[tuple[str, str]]:
+    """Return legacy (target, username) pairs to try for a Locke credential name."""
+    candidates: list[tuple[str, str]] = []
+
+    if name == "LOCKE_VAULT_PASSWORD":
+        candidates.extend(_LEGACY_VAULT_PASSWORD_PATTERNS)
+        return candidates
+
+    if name.endswith(_LEGACY_KEY_SUFFIX):
+        project = name[: -len(_LEGACY_KEY_SUFFIX)].lower()
+        candidates.append((project, "config-encryption-key"))
+        candidates.append((project, "config_encryption_key"))
+        candidates.append((f"config-encryption-key@{project}", "config-encryption-key"))
+
+    return candidates
+
+
 # ---------------------------------------------------------------------------
 # Biometric configuration
 # ---------------------------------------------------------------------------
@@ -510,6 +621,9 @@ def get_credential(name: str) -> str | None:
     When biometric is enabled on Windows, triggers a Windows Hello prompt
     (cached for ``LOCKE_BIO_CACHE_TTL`` seconds after first verification).
 
+    Tries the canonical ``locke`` service first, then falls back to legacy
+    naming patterns from prior credential-management tools.
+
     Returns None if the credential is not found.
     Raises KeystoreUnavailableError if the keystore service is not accessible.
     Raises BiometricDeniedError if the user denies the biometric prompt.
@@ -520,13 +634,38 @@ def get_credential(name: str) -> str | None:
         value = keyring.get_password(SERVICE_NAME, name)
         if value is not None:
             logger.debug("Credential '%s' found in OS keystore", name)
-        return value
+            return value
     except KeyringError as exc:
-        logger.warning("Keystore access failed for '%s': %s", name, exc)
+        logger.debug("Keystore access failed for '%s': %s", name, exc)
         raise KeystoreUnavailableError(
             platform=platform.system(),
             service=str(type(keyring.get_keyring()).__name__),
         ) from exc
+
+    # Canonical lookup missed — try legacy patterns
+    tried_wincred_targets: set[str] = set()
+    for target, username in _legacy_lookups_for(name):
+        try:
+            value = keyring.get_password(target, username)
+        except KeyringError:
+            value = None
+
+        # On Windows, keyring constructs target as "{service}/{username}" which
+        # doesn't match credentials stored under bare target names. Fall back
+        # to direct CredRead by exact target name.
+        if value is None and target not in tried_wincred_targets:
+            tried_wincred_targets.add(target)
+            value = _wincred_read_by_target(target)
+
+        if value is not None:
+            logger.warning(
+                "Credential '%s' found under legacy name (target=%r). "
+                "Run 'locke keystore migrate' to update to the new naming.",
+                name, target,
+            )
+            return value
+
+    return None
 
 
 def set_credential(name: str, value: str) -> None:
@@ -567,3 +706,86 @@ def delete_credential(name: str) -> None:
             platform=platform.system(),
             service=str(type(keyring.get_keyring()).__name__),
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Legacy credential migration
+# ---------------------------------------------------------------------------
+
+def find_legacy_credentials(names: list[str] | None = None) -> list[dict]:
+    """Scan for credentials stored under legacy naming conventions.
+
+    Args:
+        names: Locke credential names to probe.  If ``None``, only
+            ``LOCKE_VAULT_PASSWORD`` is checked, since project-specific
+            ``*_CONFIG_ENCRYPTION_KEY`` names cannot be enumerated without
+            the caller telling us what project slugs to look for.
+
+    Returns:
+        List of dicts with keys: ``locke_name``, ``legacy_target``,
+        ``legacy_username``, ``already_migrated``.
+    """
+    candidates = names if names is not None else ["LOCKE_VAULT_PASSWORD"]
+
+    found: list[dict] = []
+    for name in candidates:
+        tried_targets: set[str] = set()
+        for target, username in _legacy_lookups_for(name):
+            try:
+                value = keyring.get_password(target, username)
+            except KeyringError:
+                value = None
+
+            if value is None and target not in tried_targets:
+                tried_targets.add(target)
+                value = _wincred_read_by_target(target)
+
+            if value is not None:
+                try:
+                    current = keyring.get_password(SERVICE_NAME, name)
+                except KeyringError:
+                    current = None
+                found.append({
+                    "locke_name": name,
+                    "legacy_target": target,
+                    "legacy_username": username,
+                    "already_migrated": current is not None,
+                })
+    return found
+
+
+def migrate_credential(name: str, *, delete_legacy: bool = False) -> str | None:
+    """Copy a legacy credential into the Locke namespace.
+
+    Returns the legacy source description (e.g.
+    ``"target='myproject'"``) if migration succeeded, or ``None`` if no
+    legacy credential was found.
+    """
+    _require_biometric()
+
+    tried_targets: set[str] = set()
+    for target, username in _legacy_lookups_for(name):
+        try:
+            value = keyring.get_password(target, username)
+        except KeyringError:
+            value = None
+
+        if value is None and target not in tried_targets:
+            tried_targets.add(target)
+            value = _wincred_read_by_target(target)
+
+        if value is not None:
+            keyring.set_password(SERVICE_NAME, name, value)
+            source = f"target={target!r}"
+            logger.info(
+                "Migrated credential '%s' from legacy %s to locke namespace",
+                name, source,
+            )
+            if delete_legacy:
+                try:
+                    keyring.delete_password(target, username)
+                    logger.info("Deleted legacy credential %s", source)
+                except KeyringError:
+                    logger.warning("Could not delete legacy credential %s", source)
+            return source
+    return None

@@ -14,10 +14,14 @@ def __getattr__(name: str):
     if name == "get_vault_secret":
         from locke.vault import get_vault_secret
         return get_vault_secret
+    if name == "VaultClient":
+        from locke.vault import VaultClient
+        return VaultClient
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.1.0"
+__version__ = "0.5.1"
 __all__ = [
+    "VaultClient",
     "decrypt_config",
     "decrypt_config_file",
     "encrypt_config",

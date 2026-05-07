@@ -180,6 +180,8 @@ class VaultClient:
         self._headers = {"Authorization": f"Bearer {access_token}"}
         self._enc_key = enc_key
         self._mac_key = mac_key
+        # path -> plaintext value, populated on first sync().
+        self._secrets: dict[str, str] | None = None
 
     @classmethod
     def connect(cls) -> "VaultClient":
@@ -307,13 +309,25 @@ class VaultClient:
         """Decrypt a Bitwarden encrypted field using this client's symmetric key."""
         return _decrypt_cipher_string(enc_string, self._enc_key, self._mac_key)
 
-    def get_secret(self, path: str) -> str:
-        """Retrieve a secret by path ({project}/{tenant}/{name}).
+    def sync(self, force_refresh: bool = False) -> dict[str, str]:
+        """Fetch and decrypt every cipher in one ``/api/sync`` round-trip.
 
-        Searches vault ciphers by name matching the path convention.
-        Cipher names and values are decrypted client-side.
+        Bulk-decrypts all logins/notes into a ``{plaintext_name: value}``
+        dict, caches it on the instance, and returns it. Subsequent calls
+        return the cached dict unless *force_refresh* is set.
+
+        Use this instead of repeated :meth:`get_secret` calls when fetching
+        many secrets — Vaultwarden rate-limits ``/identity/connect/token``
+        and ``/api/sync``, and a single decrypted snapshot is enough to
+        serve every lookup for the lifetime of this client.
+
+        ``value`` is the cipher's ``login.password`` for login items and
+        ``notes`` for secure-note items. Ciphers with neither (or whose
+        name fails to decrypt) are skipped.
         """
-        # Sync vault to get latest ciphers
+        if self._secrets is not None and not force_refresh:
+            return self._secrets
+
         try:
             response = httpx.get(
                 f"{self._base_url}/api/sync",
@@ -332,26 +346,52 @@ class VaultClient:
                 self._base_url, f"sync failed: {exc}"
             ) from exc
 
-        # Search ciphers for matching name (decrypt each name to compare)
-        ciphers = sync_data.get("ciphers", [])
-        for cipher in ciphers:
+        secrets: dict[str, str] = {}
+        for cipher in sync_data.get("ciphers", []):
             name = self._decrypt(cipher.get("name"))
-            if name != path:
+            if not name:
                 continue
-
-            # For login items, return the decrypted password
+            value: str | None = None
             login = cipher.get("login")
             if login:
-                password = self._decrypt(login.get("password"))
-                if password:
-                    return password
+                value = self._decrypt(login.get("password"))
+            if not value:
+                value = self._decrypt(cipher.get("notes"))
+            if value:
+                secrets[name] = value
 
-            # For secure note items, return the decrypted notes
-            notes = self._decrypt(cipher.get("notes"))
-            if notes:
-                return notes
+        self._secrets = secrets
+        return secrets
 
-        raise SecretNotFoundError(path)
+    def list_secrets(self, prefix: str = "") -> dict[str, str]:
+        """Return cached secrets whose plaintext name starts with *prefix*.
+
+        Calls :meth:`sync` if the cache is empty. Pass an empty string to
+        get every secret in the vault.
+        """
+        if self._secrets is None:
+            self.sync()
+        if not prefix:
+            return dict(self._secrets)
+        return {k: v for k, v in self._secrets.items() if k.startswith(prefix)}
+
+    def get_secret(self, path: str) -> str:
+        """Retrieve a secret by path (``{project}/{tenant}/{name}``).
+
+        Reads from the in-memory snapshot populated by :meth:`sync`,
+        which is called automatically on first access. To pick up writes
+        made by another client during this client's lifetime, call
+        ``sync(force_refresh=True)`` first.
+
+        Raises :class:`SecretNotFoundError` if the path is not in the
+        vault.
+        """
+        if self._secrets is None:
+            self.sync()
+        try:
+            return self._secrets[path]
+        except KeyError:
+            raise SecretNotFoundError(path) from None
 
 
 def get_vault_secret(path: str) -> str:

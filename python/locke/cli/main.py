@@ -156,6 +156,11 @@ def _register_optional_commands() -> None:
     except ImportError:
         pass
     try:
+        from locke.cli.registry import registry
+        cli.add_command(registry)
+    except ImportError:
+        pass
+    try:
         from locke.cli.validate_cmd import validate
         cli.add_command(validate)
     except ImportError:
