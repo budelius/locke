@@ -4,9 +4,22 @@ Unified credentials framework — encrypted config, OS keystore, Vaultwarden int
 
 ## Install
 
+For local development from this repository:
+
 ```bash
+cd python
 pip install -e ".[dev]"
 ```
+
+From the repository root on macOS, install the public Locke CLI/package locally:
+
+```bash
+python3 -m pip install -e ./python
+locke --version
+```
+
+The `locke` executable is installed into the active Python environment's `bin`
+directory, so make sure that directory is on your `PATH`.
 
 ## Usage
 

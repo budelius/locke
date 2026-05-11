@@ -28,6 +28,19 @@ Available in Python, TypeScript, and Rust with cross-language parity.
 pip install locke
 ```
 
+#### Local install from this repository on macOS
+
+From the repository root:
+
+```bash
+python3 -m pip install -e ./python
+locke --version
+```
+
+This installs the Python package in editable mode and makes the `locke` CLI
+available on your Python environment's `PATH` (for example,
+`/Users/<you>/miniconda/bin/locke` when using Miniconda).
+
 ### TypeScript / Node
 
 ```bash
