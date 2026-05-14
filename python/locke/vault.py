@@ -202,13 +202,35 @@ class VaultClient:
 
         password_cred = resolve_credential(VAULT_PASSWORD_CREDENTIAL)
 
+        return cls.connect_with(base_url, username, password_cred.value)
+
+    @classmethod
+    def connect_with(
+        cls, base_url: str, username: str, password: str,
+    ) -> "VaultClient":
+        """Create an authenticated vault client using explicit credentials.
+
+        Use this when you need to authenticate against the same Vaultwarden
+        with a different account than the one Locke's credential pipeline
+        would resolve (e.g. a second vault user whose password is itself
+        stored in the first user's vault). ``connect()`` always reads the
+        master password through ``resolve_credential()``, which prefers the
+        OS keystore over env vars — this method skips that lookup entirely.
+        """
+        if not base_url:
+            raise VaultAuthError(
+                "unknown", f"empty base_url passed to connect_with()",
+            )
+        if not username:
+            raise VaultAuthError(
+                base_url, "empty username passed to connect_with()",
+            )
+
         # Authenticate via Bitwarden Identity API
-        token, encrypted_key = cls._authenticate(
-            base_url, username, password_cred.value,
-        )
+        token, encrypted_key = cls._authenticate(base_url, username, password)
 
         # Derive master key and decrypt the symmetric key
-        master_key = _make_master_key(password_cred.value, username)
+        master_key = _make_master_key(password, username)
         enc_key, mac_key = _decrypt_symmetric_key(encrypted_key, master_key)
 
         return cls(base_url, token, enc_key, mac_key)
