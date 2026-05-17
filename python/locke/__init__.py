@@ -19,7 +19,7 @@ def __getattr__(name: str):
         return VaultClient
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 __all__ = [
     "VaultClient",
     "decrypt_config",

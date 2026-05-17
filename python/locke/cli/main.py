@@ -171,6 +171,11 @@ def _register_optional_commands() -> None:
     except ImportError:
         pass
     try:
+        from locke.cli.vault_setup import vault_setup
+        vault.add_command(vault_setup)
+    except ImportError:
+        pass
+    try:
         from locke.cli.bio import bio
         cli.add_command(bio)
     except ImportError:

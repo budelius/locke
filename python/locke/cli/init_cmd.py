@@ -279,10 +279,14 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
             if dest == "config":
                 shared_config[key] = value
             else:
+                vault_path = f"{project}/{tenant}/{key.lower()}"
                 vault_refs.append({
-                    "path": f"{project}/{tenant}/{key.lower()}",
+                    "path": vault_path,
                     "original_key": key,
+                    "description": f"Per-developer secret -> {key}",
                 })
+                vault_keys = config["keys"].setdefault("vault", {})
+                vault_keys.setdefault(vault_path, f"Per-developer secret -> {key}")
 
         click.echo(
             f"\n  Classified: {len(shared_config)} shared config, {len(vault_refs)} vault secrets",
@@ -312,6 +316,13 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
     # Write vault references
     if vault_refs:
         vault_ref_path = locke_dir / "vault-references.json"
+        if vault_ref_path.exists():
+            with open(vault_ref_path, encoding="utf-8") as f:
+                existing_refs = json.load(f).get("secrets", [])
+            by_path = {item.get("path"): item for item in existing_refs if item.get("path")}
+            for item in vault_refs:
+                by_path[item["path"]] = item
+            vault_refs = list(by_path.values())
         with open(vault_ref_path, "w") as f:
             json.dump({"secrets": vault_refs}, f, indent=2)
         click.echo(f"  Vault references written to {vault_ref_path}", err=True)

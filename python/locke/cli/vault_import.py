@@ -613,10 +613,29 @@ def _get_existing_ciphers(client: VaultClient) -> dict:
     sync_data = response.json()
 
     names: dict[str, str] = {}
+    values: dict[str, str] = {}
+    metadata: dict[str, dict[str, str | None]] = {}
     for cipher in sync_data.get("ciphers", []):
         decrypted_name = client._decrypt(cipher.get("name"))
         if decrypted_name:
             names[decrypted_name] = cipher["id"]
+            login = cipher.get("login") or {}
+            decrypted_username = client._decrypt(login.get("username"))
+            decrypted_uri = None
+            uris = login.get("uris") or []
+            if uris:
+                decrypted_uri = client._decrypt(uris[0].get("uri"))
+            decrypted_notes = client._decrypt(cipher.get("notes"))
+            decrypted_value = client._decrypt(login.get("password"))
+            if not decrypted_value:
+                decrypted_value = decrypted_notes
+            if decrypted_value is not None:
+                values[decrypted_name] = decrypted_value
+            metadata[decrypted_name] = {
+                "username": decrypted_username,
+                "uri": decrypted_uri,
+                "notes": decrypted_notes,
+            }
 
     folders: dict[str, str] = {}
     for folder in sync_data.get("folders", []):
@@ -624,7 +643,12 @@ def _get_existing_ciphers(client: VaultClient) -> dict:
         if decrypted_name:
             folders[decrypted_name] = folder["id"]
 
-    return {"names": names, "folders": folders}
+    return {
+        "names": names,
+        "folders": folders,
+        "values": values,
+        "metadata": metadata,
+    }
 
 
 def _resolve_folder(client: VaultClient, folder_name: str, existing: dict) -> str | None:

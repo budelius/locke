@@ -93,6 +93,12 @@ eval $(locke env --key-name MYAPP_CONFIG_ENCRYPTION_KEY)
 
 # Initialize Locke in a new project
 locke init --project myapp
+
+# Create missing Vaultwarden entries from keys.vault as FILL_ME placeholders
+locke vault setup
+
+# Fill missing or placeholder vault values interactively
+locke vault setup --interactive
 ```
 
 ## Encrypted config format

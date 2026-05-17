@@ -58,6 +58,10 @@ locke keystore get LOCKE_ENCRYPTION_KEY
 # Get vault secret
 locke vault get myproject/staging/api_key
 
+# Create missing vault entries from locke.json, then fill them interactively
+locke vault setup
+locke vault setup --interactive
+
 # Initialize project
 locke init --project myproject --tenant staging
 ```

@@ -60,28 +60,27 @@ Per-developer secrets stored in Vaultwarden (personal vault). These are **never*
 Path format: `{project}/{tenant}/{secret_name}` (tenant-scoped) or `{project}/{category}/{secret_name}` (infra).
 
 **Get**: `locke vault get {project}/{tenant}/{name}`
-**Import**: `locke vault import csv --file vault-import.csv`
+**Import**: `locke vault import csv vault-import.csv`
+**Setup**: `locke vault setup --interactive`
 
 #### Bootstrapping the Vault (first-time setup)
 
-When cloning a project fresh, the vault entries listed under `keys.vault` don't exist in your personal Vaultwarden yet. Bootstrap them from the project's CSV template:
+When cloning a project fresh, the vault entries listed under `keys.vault` don't exist in your personal Vaultwarden yet. Bootstrap them directly from the key registry:
 
 ```
-locke vault import csv --file .locke/{project}-vault-import.csv
+locke vault setup
+```
+
+This creates missing vault entries with the `FILL_ME` placeholder so the team can add new vault paths before every developer knows their personal value. To fill values from the command line, run:
+
+```
+locke vault setup --interactive
 ```
 
 Notes:
-- The CSV path is **project-specific** — it lives in this repo's `.locke/` directory, not in another project. A common mistake is to run the import with a different project's CSV path.
-- The import is idempotent: re-running updates existing entries rather than creating duplicates.
-- Entries whose real value isn't known yet should use a `FILL_ME` placeholder in the CSV. After import, fill them in:
-
-  ```
-  locke vault set {project}/{tenant}/{name} --prompt
-  locke vault set {project}/{tenant}/{name} --value "<value>"
-  ```
-
-  Or edit the entry directly in the Vaultwarden UI.
-- Run `locke validate` after filling placeholders to confirm every `keys.vault` path resolves.
+- The setup command is idempotent: re-running creates newly documented entries and leaves configured values alone.
+- `locke validate` treats `FILL_ME` as not configured, so placeholders do not accidentally pass validation.
+- You can still import a full CSV manually with `locke vault import csv .locke/{project}-vault-import.csv` when a project keeps one.
 
 ### `keys.env` — Environment Variables
 
@@ -159,6 +158,8 @@ Python version with `uv sync --python-version X.Y`.
 | Get keystore credential | `locke keystore get NAME` |
 | Set keystore credential | `locke keystore set NAME --prompt` |
 | Get vault secret | `locke vault get PROJECT/TENANT/NAME` |
+| Set up vault placeholders | `locke vault setup` |
+| Fill vault values interactively | `locke vault setup --interactive` |
 | Validate setup | `locke validate` |
 | Initialize project | `locke init --project NAME` |
 | Check status | `locke status` |

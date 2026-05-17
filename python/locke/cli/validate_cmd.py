@@ -12,6 +12,7 @@ OK = "[OK]"
 FAIL = "[!!]"
 WARN = "[??]"
 SKIP = "[--]"
+PLACEHOLDER_VALUES = {"FILL_ME"}
 
 
 def _load_locke_json(project_root: str) -> dict:
@@ -181,11 +182,14 @@ def _check_vault(keys: dict, config: dict) -> tuple[int, int]:
         from locke.vault import get_vault_secret
         for path, desc in sorted(vault_entries.items()):
             # Replace {tenant} with actual tenant
-            actual_path = path.replace("{tenant}", config.get("tenant", "default"))
+            actual_path = _expand_vault_path(path, config)
             try:
                 secret = get_vault_secret(actual_path)
-                if secret:
-                    click.echo(click.style(f"  {OK} {path}", fg="green") + f" -- found")
+                if _is_placeholder_secret(secret):
+                    click.echo(click.style(f"  {FAIL} {path}", fg="red") + " -- placeholder value")
+                    failed += 1
+                elif secret:
+                    click.echo(click.style(f"  {OK} {path}", fg="green") + " -- found")
                     passed += 1
                 else:
                     click.echo(click.style(f"  {FAIL} {path}", fg="red") + f" -- empty ({desc})")
@@ -204,6 +208,22 @@ def _check_vault(keys: dict, config: dict) -> tuple[int, int]:
         failed += len(vault_entries)
 
     return passed, failed
+
+
+def _expand_vault_path(path: str, config: dict) -> str:
+    """Expand supported placeholders in a keys.vault path."""
+    return (
+        path
+        .replace("{project}", str(config.get("project") or ""))
+        .replace("{tenant}", str(config.get("tenant") or "default"))
+    )
+
+
+def _is_placeholder_secret(value: str | None) -> bool:
+    """Return True when a vault secret is still a setup placeholder."""
+    if value is None:
+        return False
+    return value.strip() in PLACEHOLDER_VALUES
 
 
 def _extract_env_var(desc: str) -> str | None:
