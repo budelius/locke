@@ -8,9 +8,7 @@ from pathlib import Path
 
 import click
 
-from locke.vault import VaultClient
-
-PLACEHOLDER_VALUE = "FILL_ME"
+from locke.vault import PLACEHOLDER_VALUE, VaultClient
 
 
 def _load_locke_json(project_root: str) -> dict:

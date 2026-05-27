@@ -32,6 +32,15 @@ VAULT_URL_VAR = "LOCKE_VAULT_URL"
 VAULT_USERNAME_VAR = "LOCKE_VAULT_USERNAME"
 VAULT_PASSWORD_CREDENTIAL = "LOCKE_VAULT_PASSWORD"
 
+# Locke-owned placeholder convention for intentionally unfilled vault secrets.
+PLACEHOLDER_VALUE = "FILL_ME"
+PLACEHOLDER_VALUES = frozenset({PLACEHOLDER_VALUE})
+
+
+def is_placeholder(value: str | None) -> bool:
+    """Return True when *value* is a Locke vault placeholder."""
+    return value is not None and value.strip() in PLACEHOLDER_VALUES
+
 
 # ---------------------------------------------------------------------------
 # Bitwarden client-side crypto helpers
@@ -331,6 +340,60 @@ class VaultClient:
         """Decrypt a Bitwarden encrypted field using this client's symmetric key."""
         return _decrypt_cipher_string(enc_string, self._enc_key, self._mac_key)
 
+    def _sync_data(self) -> dict:
+        """Return raw ``/api/sync`` data from Vaultwarden."""
+        try:
+            response = httpx.get(
+                f"{self._base_url}/api/sync",
+                headers=self._headers,
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            raise VaultAuthError(
+                self._base_url,
+                f"sync failed with HTTP {exc.response.status_code} (token may be expired)",
+            ) from exc
+        except Exception as exc:
+            raise VaultAuthError(
+                self._base_url, f"sync failed: {exc}"
+            ) from exc
+
+    def _cipher_index(self) -> dict:
+        """Return decrypted lookup maps for ciphers and folders."""
+        sync_data = self._sync_data()
+
+        names: dict[str, str] = {}
+        values: dict[str, str] = {}
+        metadata: dict[str, dict[str, str | None]] = {}
+        for cipher in sync_data.get("ciphers", []):
+            name = self._decrypt(cipher.get("name"))
+            if not name:
+                continue
+            names[name] = cipher["id"]
+            login = cipher.get("login") or {}
+            username = self._decrypt(login.get("username"))
+            uri = None
+            uris = login.get("uris") or []
+            if uris:
+                uri = self._decrypt(uris[0].get("uri"))
+            notes = self._decrypt(cipher.get("notes"))
+            value = self._decrypt(login.get("password")) or notes
+            if value is not None:
+                if is_placeholder(value):
+                    logger.warning("Vault secret %s is still a placeholder", name)
+                values[name] = value
+            metadata[name] = {"username": username, "uri": uri, "notes": notes}
+
+        folders: dict[str, str] = {}
+        for folder in sync_data.get("folders", []):
+            name = self._decrypt(folder.get("name"))
+            if name:
+                folders[name] = folder["id"]
+
+        return {"names": names, "folders": folders, "values": values, "metadata": metadata}
+
     def sync(self, force_refresh: bool = False) -> dict[str, str]:
         """Fetch and decrypt every cipher in one ``/api/sync`` round-trip.
 
@@ -350,40 +413,8 @@ class VaultClient:
         if self._secrets is not None and not force_refresh:
             return self._secrets
 
-        try:
-            response = httpx.get(
-                f"{self._base_url}/api/sync",
-                headers=self._headers,
-                timeout=30,
-            )
-            response.raise_for_status()
-            sync_data = response.json()
-        except httpx.HTTPStatusError as exc:
-            raise VaultAuthError(
-                self._base_url,
-                f"sync failed with HTTP {exc.response.status_code} (token may be expired)",
-            ) from exc
-        except Exception as exc:
-            raise VaultAuthError(
-                self._base_url, f"sync failed: {exc}"
-            ) from exc
-
-        secrets: dict[str, str] = {}
-        for cipher in sync_data.get("ciphers", []):
-            name = self._decrypt(cipher.get("name"))
-            if not name:
-                continue
-            value: str | None = None
-            login = cipher.get("login")
-            if login:
-                value = self._decrypt(login.get("password"))
-            if not value:
-                value = self._decrypt(cipher.get("notes"))
-            if value:
-                secrets[name] = value
-
-        self._secrets = secrets
-        return secrets
+        self._secrets = self._cipher_index()["values"]
+        return self._secrets
 
     def list_secrets(self, prefix: str = "") -> dict[str, str]:
         """Return cached secrets whose plaintext name starts with *prefix*.
@@ -396,6 +427,131 @@ class VaultClient:
         if not prefix:
             return dict(self._secrets)
         return {k: v for k, v in self._secrets.items() if k.startswith(prefix)}
+
+    def _resolve_folder_id(self, folder_name: str | None, index: dict) -> str | None:
+        """Return an existing or newly-created folder id."""
+        if not folder_name:
+            return None
+        folder_id = index["folders"].get(folder_name)
+        if folder_id:
+            return folder_id
+
+        response = httpx.post(
+            f"{self._base_url}/api/folders",
+            headers=self._headers,
+            json={"name": self._encrypt(folder_name)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        folder_id = response.json()["id"]
+        index["folders"][folder_name] = folder_id
+        return folder_id
+
+    def _build_cipher_payload(
+        self,
+        path: str,
+        value: str,
+        folder_id: str | None,
+        username: str | None = None,
+        uri: str | None = None,
+        notes: str | None = None,
+    ) -> dict:
+        """Build an encrypted Bitwarden login cipher payload.
+
+        Kept on the library client so programmatic writes use the same JSON
+        shape as ``locke vault import``.
+        """
+        encrypted_uri = self._encrypt(uri)
+        uris = [{"match": None, "uri": encrypted_uri}] if encrypted_uri else []
+        return {
+            "type": 1,
+            "name": self._encrypt(path),
+            "folderId": folder_id,
+            "login": {
+                "username": self._encrypt(username),
+                "password": self._encrypt(value),
+                "uris": uris,
+            },
+            "notes": self._encrypt(notes),
+            "favorite": False,
+            "reprompt": 0,
+        }
+
+    def _cipher_payload(
+        self,
+        path: str,
+        value: str,
+        folder_id: str | None,
+        username: str | None = None,
+        uri: str | None = None,
+        notes: str | None = None,
+    ) -> dict:
+        """Backward-compatible alias for _build_cipher_payload()."""
+        return self._build_cipher_payload(path, value, folder_id, username, uri, notes)
+
+    def set_secret(
+        self,
+        path: str,
+        value: str | None = None,
+        *,
+        folder: str | None = None,
+        username: str | None = None,
+        uri: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Create or update a Vaultwarden secret by path.
+
+        ``path`` is the plaintext cipher name (for example
+        ``"myproject/staging/api_key"``). By default the folder is derived
+        from the path prefix before the final slash; pass ``folder=None`` for
+        that behavior or ``folder=""`` to leave the item unfiled.
+
+        Returns ``"created"`` or ``"updated"``.
+        """
+        if not path:
+            raise ValueError("path must not be empty")
+        if value is None or value == "":
+            value = PLACEHOLDER_VALUE
+            logger.warning("Vault secret %s written with placeholder value", path)
+        elif is_placeholder(value):
+            logger.warning("Vault secret %s written with placeholder value", path)
+
+        index = self._cipher_index()
+        folder_name = path.rpartition("/")[0] if folder is None else folder
+        folder_id = self._resolve_folder_id(folder_name, index)
+        cipher_id = index["names"].get(path)
+
+        if cipher_id:
+            current = index.get("metadata", {}).get(path, {})
+            payload = self._build_cipher_payload(
+                path,
+                value,
+                folder_id,
+                username=username if username is not None else current.get("username"),
+                uri=uri if uri is not None else current.get("uri"),
+                notes=notes if notes is not None else current.get("notes"),
+            )
+            response = httpx.put(
+                f"{self._base_url}/api/ciphers/{cipher_id}",
+                headers=self._headers,
+                json=payload,
+                timeout=30,
+            )
+            action = "updated"
+        else:
+            payload = self._build_cipher_payload(path, value, folder_id, username, uri, notes)
+            response = httpx.post(
+                f"{self._base_url}/api/ciphers",
+                headers=self._headers,
+                json=payload,
+                timeout=30,
+            )
+            action = "created"
+
+        response.raise_for_status()
+        if self._secrets is not None:
+            self._secrets[path] = value
+        return action
 
     def get_secret(self, path: str) -> str:
         """Retrieve a secret by path (``{project}/{tenant}/{name}``).
@@ -411,7 +567,10 @@ class VaultClient:
         if self._secrets is None:
             self.sync()
         try:
-            return self._secrets[path]
+            value = self._secrets[path]
+            if is_placeholder(value):
+                logger.warning("Vault secret %s is still a placeholder", path)
+            return value
         except KeyError:
             raise SecretNotFoundError(path) from None
 
@@ -424,3 +583,14 @@ def get_vault_secret(path: str) -> str:
     """
     client = VaultClient.connect()
     return client.get_secret(path)
+
+
+def set_vault_secret(path: str, value: str | None = None, **kwargs) -> str:
+    """Create or update a Vaultwarden secret by path.
+
+    Returns ``"created"`` or ``"updated"``. Keyword arguments are forwarded
+    to :meth:`VaultClient.set_secret` (``folder``, ``username``, ``uri``,
+    ``notes``).
+    """
+    client = VaultClient.connect()
+    return client.set_secret(path, value, **kwargs)

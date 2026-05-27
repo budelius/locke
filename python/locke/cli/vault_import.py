@@ -689,21 +689,7 @@ def _build_cipher_payload(
     All string fields (name, password, username, notes, URIs) must be
     encrypted in ``2.iv|ct|mac`` format before sending to the API.
     """
-    encrypted_uri = client._encrypt(uri)
-    uris = [{"match": None, "uri": encrypted_uri}] if encrypted_uri else []
-    return {
-        "type": 1,  # login
-        "name": client._encrypt(name),
-        "folderId": folder_id,
-        "login": {
-            "username": client._encrypt(username),
-            "password": client._encrypt(password),
-            "uris": uris,
-        },
-        "notes": client._encrypt(notes),
-        "favorite": False,
-        "reprompt": 0,
-    }
+    return client._build_cipher_payload(name, password, folder_id, username, uri, notes)
 
 
 def _create_cipher(

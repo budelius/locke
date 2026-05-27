@@ -35,8 +35,13 @@ env = locke.load_config(".locke/config.encrypted.json")
 # Resolve a single credential
 cred = locke.resolve_credential("LOCKE_ENCRYPTION_KEY")
 
-# Get a vault secret
+# Get or set a vault secret
 secret = locke.get_vault_secret("myproject/staging/api_key")
+locke.set_vault_secret("myproject/staging/api_key", "new-value")
+
+# Check Locke-owned setup placeholders ("FILL_ME")
+if locke.is_placeholder(secret):
+    raise RuntimeError("vault secret still needs a real value")
 ```
 
 ### CLI
@@ -65,6 +70,14 @@ locke vault setup --interactive
 # Initialize project
 locke init --project myproject --tenant staging
 ```
+
+## Vault placeholders
+
+Locke uses `locke.PLACEHOLDER_VALUE` (`"FILL_ME"`) for vault entries that are
+known but not filled yet. Use `locke.is_placeholder(value)` instead of
+hard-coding the sentinel. `VaultClient.get_secret()` warns when it returns a
+placeholder; `VaultClient.set_secret(path, None)` or an empty value writes a
+placeholder and warns.
 
 ## Environment Variables
 

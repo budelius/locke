@@ -164,6 +164,15 @@ Python version with `uv sync --python-version X.Y`.
 | Initialize project | `locke init --project NAME` |
 | Check status | `locke status` |
 
+## Vault Placeholders
+
+Missing per-developer vault entries are created with Locke's placeholder value
+`FILL_ME` (`locke.PLACEHOLDER_VALUE`). Application code should call
+`locke.is_placeholder(value)` when it needs to distinguish a setup placeholder
+from a real secret. Programmatic vault writes can use
+`locke.set_vault_secret(path, value)`; passing `None` or an empty value writes
+`FILL_ME` and logs a warning.
+
 ## Credential Resolution Order
 
 1. **OS Keystore** (Windows Credential Manager / macOS Keychain / Linux Secret Service)

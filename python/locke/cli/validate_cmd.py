@@ -7,12 +7,13 @@ from pathlib import Path
 
 import click
 
+from locke.vault import is_placeholder
+
 # ASCII-safe status markers (Windows cp1252 can't render Unicode checkmarks)
 OK = "[OK]"
 FAIL = "[!!]"
 WARN = "[??]"
 SKIP = "[--]"
-PLACEHOLDER_VALUES = {"FILL_ME"}
 
 
 def _load_locke_json(project_root: str) -> dict:
@@ -221,9 +222,7 @@ def _expand_vault_path(path: str, config: dict) -> str:
 
 def _is_placeholder_secret(value: str | None) -> bool:
     """Return True when a vault secret is still a setup placeholder."""
-    if value is None:
-        return False
-    return value.strip() in PLACEHOLDER_VALUES
+    return is_placeholder(value)
 
 
 def _extract_env_var(desc: str) -> str | None:

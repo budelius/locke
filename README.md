@@ -72,8 +72,13 @@ print(env["MONGO_URI"])
 # Resolve a single credential through the pipeline
 credential = locke.resolve_credential("MYAPP_CONFIG_ENCRYPTION_KEY")
 
-# Fetch a vault secret
+# Fetch or write a vault secret
 secret = locke.get_vault_secret("myapp/prod/api_key")
+locke.set_vault_secret("myapp/prod/api_key", "new-value")
+
+# Locke owns the placeholder convention for not-yet-issued values
+if locke.is_placeholder(secret):
+    raise RuntimeError("vault secret still needs a real value")
 ```
 
 ### CLI
@@ -100,6 +105,11 @@ locke vault setup
 # Fill missing or placeholder vault values interactively
 locke vault setup --interactive
 ```
+
+Vault placeholders are represented by `locke.PLACEHOLDER_VALUE` (`"FILL_ME"`).
+`VaultClient.get_secret()` logs a warning when returning a placeholder, and
+`VaultClient.set_secret(path, None)` / empty values create a placeholder while
+logging a warning.
 
 ## Encrypted config format
 

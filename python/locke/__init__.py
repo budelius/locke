@@ -11,15 +11,19 @@ from locke.pipeline import resolve_credential
 
 
 def __getattr__(name: str):
-    if name == "get_vault_secret":
-        from locke.vault import get_vault_secret
-        return get_vault_secret
-    if name == "VaultClient":
-        from locke.vault import VaultClient
-        return VaultClient
+    if name in {
+        "get_vault_secret",
+        "is_placeholder",
+        "PLACEHOLDER_VALUE",
+        "PLACEHOLDER_VALUES",
+        "set_vault_secret",
+        "VaultClient",
+    }:
+        import locke.vault as vault
+        return getattr(vault, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 __all__ = [
     "VaultClient",
     "decrypt_config",
@@ -29,9 +33,13 @@ __all__ = [
     "flatten_config",
     "get_vault_secret",
     "inject_env",
+    "is_placeholder",
     "load_config",
+    "PLACEHOLDER_VALUE",
+    "PLACEHOLDER_VALUES",
     "read_locke_config",
     "resolve_credential",
+    "set_vault_secret",
 ]
 
 logger = logging.getLogger(__name__)
