@@ -1,12 +1,12 @@
 """locke validate -- check that all keys in locke.json are reachable."""
 
-import json
 import os
 import sys
 from pathlib import Path
 
 import click
 
+from locke.jsonc import load_jsonc
 from locke.vault import is_placeholder
 
 # ASCII-safe status markers (Windows cp1252 can't render Unicode checkmarks)
@@ -24,7 +24,7 @@ def _load_locke_json(project_root: str) -> dict:
     ]:
         if candidate.exists():
             with open(candidate) as f:
-                return json.load(f)
+                return load_jsonc(f)
     click.echo("Error: no locke.json found in .locke/ or project root.", err=True)
     sys.exit(1)
 
@@ -95,7 +95,7 @@ def _check_encrypted_config(config: dict) -> tuple[int, int]:
     for cfg_file in candidates:
         try:
             with open(cfg_file) as f:
-                encrypted = json.load(f)
+                encrypted = load_jsonc(f)
             # Check it has the right structure
             if encrypted.get("version") and encrypted.get("ciphertext"):
                 click.echo(click.style(f"  {OK} {cfg_file.name}", fg="green") + " -- valid encrypted format")
@@ -114,7 +114,7 @@ def _check_encrypted_config(config: dict) -> tuple[int, int]:
             cred = resolve_credential(key_name)
             from locke.crypto import decrypt_config
             with open(candidates[0]) as f:
-                encrypted = json.load(f)
+                encrypted = load_jsonc(f)
             plaintext = decrypt_config(encrypted, cred.value)
             actual_keys = set(_flatten_keys(plaintext))
             click.echo(click.style(f"  {OK} Decryption OK", fg="green") + f" -- {len(actual_keys)} keys in {candidates[0].name}")

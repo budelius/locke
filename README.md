@@ -17,6 +17,10 @@ Available in Python, TypeScript, and Rust with cross-language parity.
   Bitwarden-compatible REST API.
 - **Config flattening** — nested JSON flattens to `SCREAMING_SNAKE_CASE`
   environment variables (`{ "mongo": { "uri": "…" } }` → `MONGO_URI=…`).
+- **JSONC config files** — every JSON config Locke reads accepts `//` line
+  comments, `/* … */` block comments, and trailing commas, so you can annotate
+  plaintext configs and the checked-in encrypted files. Comment markers inside
+  strings (e.g. `mongodb://host`) are preserved.
 - **Cross-language parity** — Python, TypeScript, and Rust implementations
   produce byte-identical encrypt/decrypt output, verified by shared test vectors.
 

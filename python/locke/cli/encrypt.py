@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from locke.crypto import encrypt_config
+from locke.jsonc import parse_jsonc
 from locke.cli._key_util import get_key
 
 ENVIRONMENTS = ("development", "staging", "production")
@@ -60,13 +61,14 @@ def encrypt_file(
 
     path = Path(path_str)
     try:
-        with open(path) as f:
-            plaintext = json.load(f)
+        # parse_jsonc accepts plain JSON and JSONC (comments + trailing commas),
+        # so annotated .json/.jsonc config files encrypt without pre-stripping.
+        plaintext = parse_jsonc(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         click.echo(f"Error: File not found: {path}", err=True)
         sys.exit(1)
     except json.JSONDecodeError:
-        click.echo(f"Error: Invalid JSON in {path}", err=True)
+        click.echo(f"Error: Invalid JSON/JSONC in {path}", err=True)
         sys.exit(1)
 
     # Auto-resolve key_name from .locke/locke.json if not provided
@@ -158,13 +160,15 @@ def encrypt_all(
 
     found = 0
     for env in ENVIRONMENTS:
-        input_file = input_dir / f"config.{env}.json"
+        # Prefer an annotated .jsonc source, fall back to plain .json.
+        input_file = input_dir / f"config.{env}.jsonc"
         if not input_file.exists():
-            click.echo(f"  skip  {env:12s}  (no {input_file.name})")
+            input_file = input_dir / f"config.{env}.json"
+        if not input_file.exists():
+            click.echo(f"  skip  {env:12s}  (no config.{env}.json[c])")
             continue
 
-        with open(input_file, encoding="utf-8") as f:
-            config_data = json.load(f)
+        config_data = parse_jsonc(input_file.read_text(encoding="utf-8"))
 
         encrypted = encrypt_config(config_data, passphrase)
         out_file = output_dir / f"config.encrypted.{env}.json"

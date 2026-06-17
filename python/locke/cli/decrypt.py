@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from locke.crypto import decrypt_config
+from locke.jsonc import load_jsonc
 from locke.cli._key_util import get_key
 
 
@@ -77,7 +78,7 @@ def decrypt(
 
     try:
         with open(path_str) as f:
-            encrypted = json.load(f)
+            encrypted = load_jsonc(f)
     except FileNotFoundError:
         click.echo(f"Error: File not found: {path_str}", err=True)
         sys.exit(1)

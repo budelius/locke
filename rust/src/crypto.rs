@@ -135,13 +135,13 @@ pub fn encrypt_config(
     let key_bytes = decode_key(key)?;
 
     let mut salt = vec![0u8; 32];
-    getrandom::fill(&mut salt).map_err(|e| LockeError::Decryption {
+    getrandom::getrandom(&mut salt).map_err(|e| LockeError::Decryption {
         file_path: "<encrypt>".into(),
         detail: format!("random generation failed: {e}"),
     })?;
 
     let mut iv = vec![0u8; IV_LENGTH];
-    getrandom::fill(&mut iv).map_err(|e| LockeError::Decryption {
+    getrandom::getrandom(&mut iv).map_err(|e| LockeError::Decryption {
         file_path: "<encrypt>".into(),
         detail: format!("random generation failed: {e}"),
     })?;

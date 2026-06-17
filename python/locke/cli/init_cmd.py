@@ -10,6 +10,8 @@ from pathlib import Path
 
 import click
 
+from locke.jsonc import load_jsonc
+
 TEMPLATES_DIR = Path(__file__).parent.parent.parent.parent / "templates"
 
 # Default classification patterns: (glob_pattern, destination)
@@ -150,7 +152,7 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
     existing_config = None
     if locke_json_path.exists():
         with open(locke_json_path) as f:
-            existing_config = json.load(f)
+            existing_config = load_jsonc(f)
         click.echo("Existing .locke/ found — merging new entries.", err=True)
 
     # Create .locke directory
@@ -173,7 +175,7 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
         template_path = TEMPLATES_DIR / "locke.json"
         if template_path.exists():
             with open(template_path) as f:
-                config = json.load(f)
+                config = load_jsonc(f)
         else:
             config = {
                 "version": 2,
@@ -306,7 +308,7 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
         if config_path.exists() and existing_config:
             # Merge with existing
             with open(config_path) as f:
-                existing_shared = json.load(f)
+                existing_shared = load_jsonc(f)
             existing_shared.update(shared_config)
             shared_config = existing_shared
         with open(config_path, "w") as f:
@@ -318,7 +320,7 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
         vault_ref_path = locke_dir / "vault-references.json"
         if vault_ref_path.exists():
             with open(vault_ref_path, encoding="utf-8") as f:
-                existing_refs = json.load(f).get("secrets", [])
+                existing_refs = load_jsonc(f).get("secrets", [])
             by_path = {item.get("path"): item for item in existing_refs if item.get("path")}
             for item in vault_refs:
                 by_path[item["path"]] = item

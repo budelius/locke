@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from locke.jsonc import load_jsonc
 from locke.vault import PLACEHOLDER_VALUE, VaultClient
 
 
@@ -17,7 +18,7 @@ def _load_locke_json(project_root: str) -> dict:
     for candidate in [root / ".locke" / "locke.json", root / "locke.json"]:
         if candidate.exists():
             with open(candidate, encoding="utf-8") as f:
-                return json.load(f)
+                return load_jsonc(f)
     click.echo("Error: no locke.json found in .locke/ or project root.", err=True)
     sys.exit(1)
 
@@ -80,7 +81,7 @@ def _reference_entries(project_root: str, config: dict, known_paths: set[str]) -
 
     try:
         with open(ref_path, encoding="utf-8") as f:
-            data = json.load(f)
+            data = load_jsonc(f)
     except (OSError, json.JSONDecodeError) as exc:
         click.echo(f"Warning: could not read {ref_path}: {exc}", err=True)
         return []

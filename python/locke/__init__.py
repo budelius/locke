@@ -7,6 +7,7 @@ from pathlib import Path
 
 from locke.crypto import decrypt_config, encrypt_config
 from locke.flatten import flatten_config
+from locke.jsonc import load_jsonc, parse_jsonc, strip_jsonc
 from locke.pipeline import resolve_credential
 
 
@@ -23,7 +24,7 @@ def __getattr__(name: str):
         return getattr(vault, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 __all__ = [
     "VaultClient",
     "decrypt_config",
@@ -35,11 +36,14 @@ __all__ = [
     "inject_env",
     "is_placeholder",
     "load_config",
+    "load_jsonc",
+    "parse_jsonc",
     "PLACEHOLDER_VALUE",
     "PLACEHOLDER_VALUES",
     "read_locke_config",
     "resolve_credential",
     "set_vault_secret",
+    "strip_jsonc",
 ]
 
 logger = logging.getLogger(__name__)
@@ -91,7 +95,7 @@ def decrypt_config_file(
     """
     config_path = Path(config_path)
     with open(config_path) as f:
-        encrypted = json.load(f)
+        encrypted = load_jsonc(f)
 
     credential = resolve_credential(key_name)
     return decrypt_config(encrypted, credential.value)
@@ -148,7 +152,7 @@ def read_locke_config(
         return None
     try:
         with open(locke_json) as f:
-            return json.load(f)
+            return load_jsonc(f)
     except (json.JSONDecodeError, OSError) as exc:
         logger.debug("Failed to read %s: %s", locke_json, exc)
         return None

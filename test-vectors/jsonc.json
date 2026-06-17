@@ -1,0 +1,89 @@
+{
+  "description": "Test vectors for JSONC parsing — JSON with // line comments, /* block */ comments, and trailing commas. Comment markers and commas inside string literals MUST be preserved. All three ports (python, rust, typescript) parse `input` and must produce `expected`.",
+  "vectors": [
+    {
+      "name": "line-comment",
+      "description": "A // line comment is removed",
+      "input": "{\n  // leading comment\n  \"a\": 1\n}",
+      "expected": { "a": 1 }
+    },
+    {
+      "name": "trailing-line-comment",
+      "description": "A // comment after a value is removed",
+      "input": "{ \"a\": 1, // inline\n  \"b\": 2 }",
+      "expected": { "a": 1, "b": 2 }
+    },
+    {
+      "name": "block-comment",
+      "description": "A /* */ block comment is removed",
+      "input": "{ /* block */ \"a\": 1 }",
+      "expected": { "a": 1 }
+    },
+    {
+      "name": "multiline-block-comment",
+      "description": "A multi-line block comment is removed",
+      "input": "{\n  /*\n   * multi\n   * line\n   */\n  \"a\": 1\n}",
+      "expected": { "a": 1 }
+    },
+    {
+      "name": "trailing-comma-object",
+      "description": "A trailing comma before } is removed",
+      "input": "{ \"a\": 1, \"b\": 2, }",
+      "expected": { "a": 1, "b": 2 }
+    },
+    {
+      "name": "trailing-comma-array",
+      "description": "A trailing comma before ] is removed",
+      "input": "{ \"a\": [1, 2, 3,] }",
+      "expected": { "a": [1, 2, 3] }
+    },
+    {
+      "name": "trailing-comma-with-whitespace",
+      "description": "A trailing comma followed by newline/whitespace before } is removed",
+      "input": "{\n  \"a\": 1,\n}",
+      "expected": { "a": 1 }
+    },
+    {
+      "name": "comment-markers-in-string",
+      "description": "// and /* */ inside string literals are NOT comments",
+      "input": "{ \"url\": \"https://example.com//path\", \"note\": \"/* not a comment */\" }",
+      "expected": { "url": "https://example.com//path", "note": "/* not a comment */" }
+    },
+    {
+      "name": "mongo-uri-double-slash",
+      "description": "mongodb:// scheme inside a string is preserved",
+      "input": "{\n  \"mongo\": { \"uri\": \"mongodb://admin:p@host:27017/db?tls=true\" } // engine\n}",
+      "expected": { "mongo": { "uri": "mongodb://admin:p@host:27017/db?tls=true" } }
+    },
+    {
+      "name": "escaped-quote-in-string",
+      "description": "An escaped quote does not end the string; following // stays literal",
+      "input": "{ \"q\": \"a \\\" b // still string\" }",
+      "expected": { "q": "a \" b // still string" }
+    },
+    {
+      "name": "comma-in-string-before-brace",
+      "description": "A comma inside a string is not a trailing comma",
+      "input": "{ \"a\": \"x,\" }",
+      "expected": { "a": "x," }
+    },
+    {
+      "name": "realistic-config",
+      "description": "A realistic annotated config with mixed comments and a trailing comma",
+      "input": "{\n  // runtime secrets\n  \"mongo\": { \"uri\": \"mongodb://u:p@h:27017/db\" },\n  /* engine proxy */\n  \"airtable_importer\": {\n    \"api_url\": \"https://processor-dev.pseekoo.io\", // staging engine\n    \"service_token\": \"TOKEN\",\n  },\n}",
+      "expected": {
+        "mongo": { "uri": "mongodb://u:p@h:27017/db" },
+        "airtable_importer": {
+          "api_url": "https://processor-dev.pseekoo.io",
+          "service_token": "TOKEN"
+        }
+      }
+    },
+    {
+      "name": "plain-json-unchanged",
+      "description": "Plain JSON with no comments parses unchanged",
+      "input": "{ \"a\": 1, \"b\": [2, 3], \"c\": { \"d\": true } }",
+      "expected": { "a": 1, "b": [2, 3], "c": { "d": true } }
+    }
+  ]
+}

@@ -73,10 +73,10 @@ fn main() {
                     process::exit(1);
                 }
             };
-            let encrypted: serde_json::Value = match serde_json::from_str(&contents) {
+            let encrypted: serde_json::Value = match locke::jsonc::parse_jsonc(&contents) {
                 Ok(v) => v,
                 Err(e) => {
-                    eprintln!("Error: Invalid JSON: {e}");
+                    eprintln!("Error: Invalid JSON/JSONC: {e}");
                     process::exit(1);
                 }
             };
@@ -116,10 +116,12 @@ fn main() {
                     process::exit(1);
                 }
             };
-            let plaintext: serde_json::Value = match serde_json::from_str(&contents) {
+            // parse_jsonc accepts plain JSON and JSONC (comments + trailing
+            // commas), so annotated config files encrypt without pre-stripping.
+            let plaintext: serde_json::Value = match locke::jsonc::parse_jsonc(&contents) {
                 Ok(v) => v,
                 Err(e) => {
-                    eprintln!("Error: Invalid JSON: {e}");
+                    eprintln!("Error: Invalid JSON/JSONC: {e}");
                     process::exit(1);
                 }
             };

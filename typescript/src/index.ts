@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { decryptConfig, encryptConfig } from "./crypto.js";
 import type { EncryptedConfig } from "./crypto.js";
 import { flattenConfig } from "./flatten.js";
+import { parseJsonc, stripJsonc } from "./jsonc.js";
 import { resolveCredential } from "./pipeline.js";
 import { getVaultSecret } from "./vault.js";
 
@@ -14,7 +15,9 @@ export {
   encryptConfig,
   flattenConfig,
   getVaultSecret,
+  parseJsonc,
   resolveCredential,
+  stripJsonc,
 };
 
 export async function loadConfig(
@@ -22,7 +25,7 @@ export async function loadConfig(
   keyName = "LOCKE_ENCRYPTION_KEY",
 ): Promise<Record<string, string>> {
   const raw = await readFile(configPath, "utf8");
-  const encrypted: EncryptedConfig = JSON.parse(raw);
+  const encrypted = parseJsonc(raw) as EncryptedConfig;
 
   const credential = await resolveCredential(keyName);
   const plaintext = decryptConfig(encrypted, credential.value);

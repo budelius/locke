@@ -17,6 +17,7 @@ import sys
 
 import click
 
+from locke.jsonc import load_jsonc
 from locke.vault import VaultClient
 
 # Azure credential field definitions
@@ -309,7 +310,7 @@ def kv(
     # From JSON file
     if secrets_file:
         with open(secrets_file) as f:
-            file_secrets = json.load(f)
+            file_secrets = load_jsonc(f)
         for secret_name, value in file_secrets.items():
             item_name = f"{folder}/{secret_name}"
             if value:
@@ -425,7 +426,7 @@ def gcp(
     for filepath in files:
         try:
             with open(filepath, encoding="utf-8") as f:
-                data = json.load(f)
+                data = load_jsonc(f)
         except (json.JSONDecodeError, OSError) as exc:
             click.echo(f"  [SKIP] {filepath} — {exc}")
             skipped.append(filepath)
