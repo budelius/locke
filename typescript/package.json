@@ -23,10 +23,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": "dist/cli/main.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "tsc"
   },
   "dependencies": {
     "commander": "^12.0.0",
