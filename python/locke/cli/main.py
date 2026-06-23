@@ -128,16 +128,90 @@ def vault() -> None:
 @vault.command("get")
 @click.argument("path")
 @click.option("--vault-url", default=None, help="Override vault URL")
-def vault_get(path: str, vault_url: str | None) -> None:
-    """Retrieve a secret from Vaultwarden by path."""
+@click.option(
+    "--field",
+    type=click.Choice(["password", "username", "both"]),
+    default="password",
+    help="Which field(s) of the entry to print (default: password)",
+)
+def vault_get(path: str, vault_url: str | None, field: str) -> None:
+    """Retrieve a secret from Vaultwarden by path.
+
+    \b
+    Examples:
+        locke vault get myapp/prod/api_key
+        locke vault get myapp/prod/db_login --field username
+        locke vault get myapp/prod/db_login --field both
+    """
     import os
     if vault_url:
         os.environ["LOCKE_VAULT_URL"] = vault_url
 
     try:
-        from locke.vault import get_vault_secret
-        secret = get_vault_secret(path)
-        click.echo(secret)
+        if field == "password":
+            from locke.vault import get_vault_secret
+            click.echo(get_vault_secret(path))
+        else:
+            from locke.vault import get_vault_secret_pair
+            pair = get_vault_secret_pair(path)
+            if field == "username":
+                click.echo(pair.username or "")
+            else:  # both
+                click.echo(f"{pair.username or ''}:{pair.password}")
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@vault.command("set")
+@click.argument("path")
+@click.option("--vault-url", default=None, help="Override vault URL")
+@click.option("--username", default=None, help="Username field of the entry")
+@click.option(
+    "--password",
+    default=None,
+    help="Password field of the entry (prompts if omitted and --username is set)",
+)
+@click.option(
+    "--folder",
+    default=None,
+    help="Vault folder (default: derived from the path prefix)",
+)
+def vault_set(
+    path: str,
+    vault_url: str | None,
+    username: str | None,
+    password: str | None,
+    folder: str | None,
+) -> None:
+    """Create or update a Vaultwarden entry.
+
+    Pass ``--username`` together with ``--password`` to store both in one
+    entry (the combined credential). Omit ``--username`` to store a plain
+    single-value secret.
+
+    \b
+    Examples:
+        locke vault set myapp/prod/api_key --password "sk_live_..."
+        locke vault set myapp/prod/db_login --username admin --password "s3cr3t"
+    """
+    import os
+    if vault_url:
+        os.environ["LOCKE_VAULT_URL"] = vault_url
+
+    if password is None and username is not None:
+        password = click.prompt("Password", hide_input=True, default="", show_default=False)
+
+    try:
+        if username is not None:
+            from locke.vault import set_vault_secret_pair
+            action = set_vault_secret_pair(
+                path, username, password, folder=folder
+            )
+        else:
+            from locke.vault import set_vault_secret
+            action = set_vault_secret(path, password, folder=folder)
+        click.echo(f"{action}: {path}", err=True)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)

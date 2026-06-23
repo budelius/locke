@@ -8,6 +8,11 @@
     {
       "path": "{project}/{tenant}/deploy_token",
       "description": "GitLab deploy token"
+    },
+    {
+      "path": "{project}/{tenant}/db_login",
+      "description": "Database login — username + password in one entry (combined credential). Read with get_secret_pair() / `vault get --field both`.",
+      "kind": "username_password"
     }
   ]
 }

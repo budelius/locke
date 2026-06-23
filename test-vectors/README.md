@@ -9,6 +9,7 @@ Shared cross-language test vectors for Locke.
 | `encrypt-decrypt.json` | AES-256-GCM encrypt/decrypt with PBKDF2-SHA256 |
 | `flatten.json` | Config flattening to SCREAMING_SNAKE_CASE |
 | `pipeline.json` | Credential resolution pipeline priority |
+| `vault-cipher.json` | Bitwarden client-side crypto (PBKDF2 master key, HKDF stretch, AES-256-CBC+HMAC cipher strings, symmetric-key decryption) |
 
 ## Format
 

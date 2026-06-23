@@ -17,6 +17,7 @@ import hashlib
 import hmac as hmac_mod
 import logging
 import os
+from typing import NamedTuple
 
 import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -40,6 +41,22 @@ PLACEHOLDER_VALUES = frozenset({PLACEHOLDER_VALUE})
 def is_placeholder(value: str | None) -> bool:
     """Return True when *value* is a Locke vault placeholder."""
     return value is not None and value.strip() in PLACEHOLDER_VALUES
+
+
+class CredentialPair(NamedTuple):
+    """A username + password retrieved from a single vault entry.
+
+    Bitwarden login ciphers natively carry both a ``username`` and a
+    ``password`` field. Storing a credential as one entry (rather than two
+    separate secrets) keeps the pair together and lets callers fetch both in
+    a single round-trip via :meth:`VaultClient.get_secret_pair`.
+
+    ``username`` is ``None`` when the entry has no username set; ``password``
+    is the empty string when only a username is stored.
+    """
+
+    username: str | None
+    password: str
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +208,8 @@ class VaultClient:
         self._mac_key = mac_key
         # path -> plaintext value, populated on first sync().
         self._secrets: dict[str, str] | None = None
+        # path -> {"username", "uri", "notes"}, populated on first sync().
+        self._metadata: dict[str, dict[str, str | None]] | None = None
 
     @classmethod
     def connect(cls) -> "VaultClient":
@@ -413,7 +432,9 @@ class VaultClient:
         if self._secrets is not None and not force_refresh:
             return self._secrets
 
-        self._secrets = self._cipher_index()["values"]
+        index = self._cipher_index()
+        self._secrets = index["values"]
+        self._metadata = index["metadata"]
         return self._secrets
 
     def list_secrets(self, prefix: str = "") -> dict[str, str]:
@@ -551,6 +572,13 @@ class VaultClient:
         response.raise_for_status()
         if self._secrets is not None:
             self._secrets[path] = value
+        if self._metadata is not None:
+            current = self._metadata.get(path, {})
+            self._metadata[path] = {
+                "username": username if username is not None else current.get("username"),
+                "uri": uri if uri is not None else current.get("uri"),
+                "notes": notes if notes is not None else current.get("notes"),
+            }
         return action
 
     def get_secret(self, path: str) -> str:
@@ -574,6 +602,54 @@ class VaultClient:
         except KeyError:
             raise SecretNotFoundError(path) from None
 
+    def get_secret_pair(self, path: str) -> CredentialPair:
+        """Retrieve a username + password stored in a single vault entry.
+
+        Reads one login cipher and returns both its ``username`` and
+        ``password`` fields as a :class:`CredentialPair`. Use this for
+        credentials that pair a username with a password (database logins,
+        SMTP accounts, …) instead of splitting them across two secrets.
+
+        Reads from the in-memory snapshot populated by :meth:`sync` (called
+        automatically on first access). Raises :class:`SecretNotFoundError`
+        if no cipher with *path* exists.
+        """
+        if self._secrets is None or self._metadata is None:
+            self.sync()
+        meta = self._metadata.get(path)
+        if meta is None and path not in self._secrets:
+            raise SecretNotFoundError(path)
+        password = self._secrets.get(path, "")
+        if is_placeholder(password):
+            logger.warning("Vault secret %s is still a placeholder", path)
+        username = (meta or {}).get("username")
+        return CredentialPair(username=username, password=password)
+
+    def set_secret_pair(
+        self,
+        path: str,
+        username: str | None,
+        password: str | None = None,
+        *,
+        folder: str | None = None,
+        uri: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Create or update a single vault entry holding a username + password.
+
+        Convenience wrapper around :meth:`set_secret` that writes both the
+        ``username`` and ``password`` fields of one login cipher. Returns
+        ``"created"`` or ``"updated"``.
+        """
+        return self.set_secret(
+            path,
+            password,
+            folder=folder,
+            username=username,
+            uri=uri,
+            notes=notes,
+        )
+
 
 def get_vault_secret(path: str) -> str:
     """Retrieve a secret from Vaultwarden by path.
@@ -594,3 +670,26 @@ def set_vault_secret(path: str, value: str | None = None, **kwargs) -> str:
     """
     client = VaultClient.connect()
     return client.set_secret(path, value, **kwargs)
+
+
+def get_vault_secret_pair(path: str) -> CredentialPair:
+    """Retrieve a username + password stored in a single Vaultwarden entry.
+
+    High-level convenience wrapper around
+    :meth:`VaultClient.get_secret_pair`. Path format:
+    ``{project}/{tenant_slug}/{secret_name}``.
+    """
+    client = VaultClient.connect()
+    return client.get_secret_pair(path)
+
+
+def set_vault_secret_pair(
+    path: str, username: str | None, password: str | None = None, **kwargs
+) -> str:
+    """Create or update a single Vaultwarden entry holding a username + password.
+
+    Returns ``"created"`` or ``"updated"``. Keyword arguments are forwarded
+    to :meth:`VaultClient.set_secret_pair` (``folder``, ``uri``, ``notes``).
+    """
+    client = VaultClient.connect()
+    return client.set_secret_pair(path, username, password, **kwargs)

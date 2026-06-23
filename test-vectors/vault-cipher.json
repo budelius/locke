@@ -1,0 +1,36 @@
+{
+  "description": "Bitwarden client-side crypto vectors for the Vaultwarden client",
+  "master_key_derivation": {
+    "description": "PBKDF2-SHA256(password, lowercase(email), iterations) -> 32-byte master key",
+    "password": "correct horse battery staple",
+    "email": "User@Example.COM",
+    "iterations": 600000,
+    "expected_master_key_hex": "55dc4a94e4881ffd792d6cb4173d7145756cd95ddc9b2310bb0fc931123c8248"
+  },
+  "stretch_master_key": {
+    "description": "HKDF-Expand(master_key, info, 32) for info='enc' and info='mac'",
+    "master_key_hex": "55dc4a94e4881ffd792d6cb4173d7145756cd95ddc9b2310bb0fc931123c8248",
+    "expected_enc_key_hex": "93ded3e35b9346cf64c4bdead65723856c45867ef3c3fb28696269fc2444394b",
+    "expected_mac_key_hex": "29eaff41674c0bbb38f09f8fde3c77000e040ecc0e109479039c69b65acba1b7"
+  },
+  "decrypt_cipher_string": {
+    "description": "Decrypt a type-2 (AES-256-CBC + HMAC-SHA256) string '2.iv|ct|mac'",
+    "enc_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "mac_key_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "cipher_string": "2.EBESExQVFhcYGRobHB0eHw==|E1wRei7N2Tf5bJ6GP9bJoA==|eWO49sER3+oSQoFfDma/yLYpizmOsTIzJw+8D+aPuXs=",
+    "expected_plaintext": "s3cr3t-p@ssw0rd"
+  },
+  "decrypt_symmetric_key": {
+    "description": "Decrypt the user's 64-byte symmetric Key field, then split into (enc, mac)",
+    "master_key_hex": "55dc4a94e4881ffd792d6cb4173d7145756cd95ddc9b2310bb0fc931123c8248",
+    "encrypted_key": "2.ICEiIyQlJicoKSorLC0uLw==|BjFACucCDS72Fw/wBQG+0N1wM4iOGbvXuBMXhif9KMU1aRx4CsrcXGAhpH+EMjNZRdtshV4CxF+g3JLQadNUyxd0soBcUwWdhnRjRelPPj0=|md4VD5o7eUioFxi15Om4VAcUvTJVqw1bfoVNekS08Qw=",
+    "expected_enc_key_hex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+    "expected_mac_key_hex": "e3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bc"
+  },
+  "roundtrip": {
+    "description": "encrypt(plaintext) with random IV must decrypt back to plaintext under the same keys",
+    "enc_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "mac_key_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "plaintext": "round-trip value with unicode: café ☕"
+  }
+}

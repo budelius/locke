@@ -21,7 +21,23 @@ pub struct Credential {
 }
 
 fn resolve_from_keystore(name: &str) -> Option<String> {
-    keystore::get_credential(name).ok().flatten()
+    // Biometric errors (denied / unavailable) are treated as "keystore
+    // unavailable" so the pipeline falls through to env var, GitLab CLI, and
+    // .env backends. This enables graceful degradation in non-interactive
+    // shells where Windows Hello cannot prompt (mirrors the Python pipeline).
+    match keystore::get_credential(name) {
+        Ok(value) => value,
+        Err(
+            LockeError::BiometricDenied { .. } | LockeError::BiometricUnavailable { .. },
+        ) => {
+            eprintln!(
+                "WARNING: Biometric gating prevented keystore access for '{name}' — \
+                 trying remaining backends."
+            );
+            None
+        }
+        Err(_) => None,
+    }
 }
 
 fn resolve_from_env(name: &str) -> Option<String> {

@@ -85,3 +85,18 @@ export class KeystoreUnavailableError extends LockeError {
     super(`Keystore unavailable on ${platform}: ${service}`);
   }
 }
+
+export class BiometricDeniedError extends LockeError {
+  constructor(public readonly reason: string = "denied") {
+    super(`Biometric verification ${reason}`);
+  }
+}
+
+export class BiometricUnavailableError extends LockeError {
+  constructor(public readonly detail: string = "") {
+    const msg = detail
+      ? `Biometric authentication not available: ${detail}`
+      : "Biometric authentication not available";
+    super(msg);
+  }
+}

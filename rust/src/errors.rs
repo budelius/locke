@@ -40,6 +40,12 @@ pub enum LockeError {
     #[error("Keystore unavailable on {platform}: {service}")]
     KeystoreUnavailable { platform: String, service: String },
 
+    #[error("Biometric verification {reason}")]
+    BiometricDenied { reason: String },
+
+    #[error("Biometric authentication not available{}", if detail.is_empty() { String::new() } else { format!(": {}", detail) })]
+    BiometricUnavailable { detail: String },
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

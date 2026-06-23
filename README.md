@@ -80,6 +80,11 @@ credential = locke.resolve_credential("MYAPP_CONFIG_ENCRYPTION_KEY")
 secret = locke.get_vault_secret("myapp/prod/api_key")
 locke.set_vault_secret("myapp/prod/api_key", "new-value")
 
+# Username + password in a single entry (combined credential)
+locke.set_vault_secret_pair("myapp/prod/db_login", "admin", "s3cr3t")
+pair = locke.get_vault_secret_pair("myapp/prod/db_login")
+print(pair.username, pair.password)   # -> admin s3cr3t
+
 # Locke owns the placeholder convention for not-yet-issued values
 if locke.is_placeholder(secret):
     raise RuntimeError("vault secret still needs a real value")
@@ -108,12 +113,39 @@ locke vault setup
 
 # Fill missing or placeholder vault values interactively
 locke vault setup --interactive
+
+# Read / write a single secret
+locke vault get myapp/prod/api_key
+locke vault set myapp/prod/api_key --password "sk_live_..."
+
+# Combined credential — username + password in one entry
+locke vault set myapp/prod/db_login --username admin --password "s3cr3t"
+locke vault get myapp/prod/db_login --field username   # -> admin
+locke vault get myapp/prod/db_login --field both        # -> admin:s3cr3t
 ```
 
 Vault placeholders are represented by `locke.PLACEHOLDER_VALUE` (`"FILL_ME"`).
 `VaultClient.get_secret()` logs a warning when returning a placeholder, and
 `VaultClient.set_secret(path, None)` / empty values create a placeholder while
 logging a warning.
+
+### Combined credentials (username + password)
+
+Credentials that pair a username with a password (database logins, SMTP
+accounts, …) can live in a **single** vault entry instead of two separate
+secrets. A Bitwarden login item natively carries both a `username` and a
+`password` field, so Locke stores both together and returns them as a
+`CredentialPair`:
+
+```python
+pair = locke.get_vault_secret_pair("myapp/prod/db_login")
+pair.username   # "admin"  (None if unset)
+pair.password   # "s3cr3t"
+```
+
+The same `get_secret_pair` / `set_secret_pair` API and `vault get --field` /
+`vault set --username` CLI are available in all three implementations (Python,
+TypeScript, Rust).
 
 ## Encrypted config format
 

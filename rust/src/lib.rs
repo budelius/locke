@@ -14,6 +14,8 @@ use std::path::Path;
 
 use errors::LockeError;
 
+pub use vault::{CredentialPair, VaultClient};
+
 pub fn load_config(config_path: &Path) -> Result<BTreeMap<String, String>, LockeError> {
     let contents = std::fs::read_to_string(config_path)?;
     let encrypted: serde_json::Value = jsonc::parse_jsonc(&contents)?;
