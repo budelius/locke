@@ -7,7 +7,7 @@ Guidance for Claude Code when working with this repository.
 **Locke** is a unified credentials framework — a polyglot library (Python,
 TypeScript, Rust) and CLI that gives any project a consistent way to manage
 secrets: encrypted configs checked into git, OS keystore resolution,
-environment-variable fallback, and Vaultwarden integration.
+environment-variable fallback, and Vaultwarden/OpenBao integration.
 
 ## Architecture
 
@@ -56,6 +56,14 @@ The key is stored in the OS keystore (service `locke`) or as an env var.
   from the OS keystore or env var `LOCKE_VAULT_PASSWORD`
 - Import via API: `locke vault import csv|azure|kv|gcp` creates or updates
   secrets directly (no duplicates on re-import)
+
+### OpenBao Integration (Python)
+
+- KV v1/v2 client shaped like the Vaultwarden client (`get_secret`/`set_secret`,
+  `get_secret_pair`/`set_secret_pair`) so call sites can migrate without changes
+- Connection requires: `LOCKE_OPENBAO_ADDR`/`OPENBAO_ADDR`/`VAULT_ADDR` and
+  `LOCKE_OPENBAO_TOKEN`/`OPENBAO_TOKEN`/`VAULT_TOKEN`
+- Python-only as of `0.9.0` — not yet implemented in TypeScript or Rust
 
 ### Config Flattening
 

@@ -15,6 +15,8 @@ Available in Python, TypeScript, and Rust with cross-language parity.
   evaluated in priority order.
 - **Vaultwarden/Bitwarden integration** — fetch and import secrets via the
   Bitwarden-compatible REST API.
+- **OpenBao KV integration** (Python) — fetch and write secrets from an
+  OpenBao KV v1/v2 mount, with the same shape as the Vaultwarden client.
 - **Config flattening** — nested JSON flattens to `SCREAMING_SNAKE_CASE`
   environment variables (`{ "mongo": { "uri": "…" } }` → `MONGO_URI=…`).
 - **JSONC config files** — every JSON config Locke reads accepts `//` line
@@ -147,6 +149,36 @@ The same `get_secret_pair` / `set_secret_pair` API and `vault get --field` /
 `vault set --username` CLI are available in all three implementations (Python,
 TypeScript, Rust).
 
+## OpenBao KV (Python)
+
+Locke also supports [OpenBao](https://openbao.org/) as a secret backend,
+shaped like the Vaultwarden client so call sites can migrate without changes.
+Currently available in the **Python** package only.
+
+```python
+import locke
+
+secret = locke.get_openbao_secret("myapp/prod/api_key")
+locke.set_openbao_secret("myapp/prod/api_key", "new-value")
+
+locke.set_openbao_secret_pair("myapp/prod/db_login", "admin", "s3cr3t")
+pair = locke.get_openbao_secret_pair("myapp/prod/db_login")
+```
+
+```bash
+locke openbao get myapp/prod/api_key
+locke openbao set myapp/prod/api_key --password "sk_live_..."
+
+# Combined credential
+locke openbao set myapp/prod/db_login --username admin --password "s3cr3t"
+locke openbao get myapp/prod/db_login --field username   # -> admin
+```
+
+Connects using `LOCKE_OPENBAO_ADDR` / `OPENBAO_ADDR` / `VAULT_ADDR` and
+`LOCKE_OPENBAO_TOKEN` / `OPENBAO_TOKEN` / `VAULT_TOKEN` (checked in that
+order), plus `LOCKE_OPENBAO_MOUNT` (default `secret`) and
+`LOCKE_OPENBAO_KV_VERSION` (`1` or `2`, default `2`).
+
 ## Encrypted config format
 
 ```json
@@ -189,6 +221,10 @@ Your application picks its own credential names (e.g.
 | `LOCKE_VAULT_URL` | Vaultwarden server URL |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username |
 | `LOCKE_VAULT_PASSWORD` | Vaultwarden password (prefer OS keystore) |
+| `LOCKE_OPENBAO_ADDR` | OpenBao server URL (Python only; falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
+| `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
+| `LOCKE_OPENBAO_MOUNT` | OpenBao KV mount name (default `secret`) |
+| `LOCKE_OPENBAO_KV_VERSION` | OpenBao KV engine version, `1` or `2` (default `2`) |
 
 ## Repository layout
 

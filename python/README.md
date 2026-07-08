@@ -1,6 +1,6 @@
 # Locke — Python
 
-Unified credentials framework — encrypted config, OS keystore, Vaultwarden integration.
+Unified credentials framework — encrypted config, OS keystore, Vaultwarden and OpenBao integration.
 
 ## Install
 
@@ -67,9 +67,28 @@ locke vault get myproject/staging/api_key
 locke vault setup
 locke vault setup --interactive
 
+# Get/set an OpenBao KV secret
+locke openbao get myproject/staging/api_key
+locke openbao set myproject/staging/api_key --password "new-value"
+
 # Initialize project
 locke init --project myproject --tenant staging
 ```
+
+## OpenBao KV
+
+Locke can also read/write secrets from an [OpenBao](https://openbao.org/) KV
+v1/v2 mount, using the same shape as the Vaultwarden client
+(`get_secret`/`set_secret`, `get_secret_pair`/`set_secret_pair`):
+
+```python
+secret = locke.get_openbao_secret("myproject/staging/api_key")
+locke.set_openbao_secret("myproject/staging/api_key", "new-value")
+```
+
+Connects via `LOCKE_OPENBAO_ADDR`/`OPENBAO_ADDR`/`VAULT_ADDR` and
+`LOCKE_OPENBAO_TOKEN`/`OPENBAO_TOKEN`/`VAULT_TOKEN`. See
+`locke/openbao.py` for the full env var list (mount, KV version).
 
 ## Vault placeholders
 
@@ -88,6 +107,8 @@ placeholder and warns.
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable biometric gating |
 | `LOCKE_VAULT_URL` | Vaultwarden server URL |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username |
+| `LOCKE_OPENBAO_ADDR` | OpenBao server URL (falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
+| `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
 
 ## Testing
 
