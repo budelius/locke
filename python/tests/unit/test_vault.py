@@ -161,3 +161,33 @@ def test_set_secret_pair_refreshes_metadata_cache(monkeypatch):
     pair = client.get_secret_pair("proj/dev/db_login")
     assert pair.username == "admin"
     assert pair.password == "s3cret"
+
+
+def test_connection_setting_prefers_environ(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("LOCKE_VAULT_URL=https://from-dotenv.example\n")
+    monkeypatch.setenv("LOCKE_VAULT_URL", "https://from-env.example")
+
+    assert VaultClient._connection_setting("LOCKE_VAULT_URL") == "https://from-env.example"
+
+
+def test_connection_setting_falls_back_to_dotenv(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "LOCKE_VAULT_URL=https://from-dotenv.example\n"
+        "LOCKE_VAULT_USERNAME=vault-user\n"
+    )
+    monkeypatch.delenv("LOCKE_VAULT_URL", raising=False)
+    monkeypatch.delenv("LOCKE_VAULT_USERNAME", raising=False)
+
+    assert VaultClient._connection_setting("LOCKE_VAULT_URL") == "https://from-dotenv.example"
+    assert VaultClient._connection_setting("LOCKE_VAULT_USERNAME") == "vault-user"
+
+
+def test_connection_setting_ignores_dotenv_in_production(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("LOCKE_VAULT_URL=https://from-dotenv.example\n")
+    monkeypatch.delenv("LOCKE_VAULT_URL", raising=False)
+    monkeypatch.setenv("LOCKE_ENV", "production")
+
+    assert VaultClient._connection_setting("LOCKE_VAULT_URL") is None

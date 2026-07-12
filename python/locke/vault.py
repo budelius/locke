@@ -23,8 +23,9 @@ import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
+from locke.env import is_production
 from locke.errors import SecretNotFoundError, VaultAuthError
-from locke.pipeline import resolve_credential
+from locke.pipeline import _resolve_from_dotenv, resolve_credential
 
 logger = logging.getLogger(__name__)
 
@@ -211,21 +212,39 @@ class VaultClient:
         # path -> {"username", "uri", "notes"}, populated on first sync().
         self._metadata: dict[str, dict[str, str | None]] | None = None
 
+    @staticmethod
+    def _connection_setting(var_name: str) -> str | None:
+        """Resolve a vault connection setting (URL / username).
+
+        Process environment first; outside production, fall back to ./.env so
+        `locke vault …` works from a project directory without exporting the
+        variables into the shell first. The master password is NOT read here —
+        it always goes through resolve_credential() (keystore-first).
+        """
+        value = os.environ.get(var_name)
+        if value:
+            return value
+        if is_production():
+            return None
+        return _resolve_from_dotenv(var_name)
+
     @classmethod
     def connect(cls) -> "VaultClient":
         """Create an authenticated vault client using pipeline-resolved credentials."""
-        base_url = os.environ.get(VAULT_URL_VAR)
+        base_url = cls._connection_setting(VAULT_URL_VAR)
         if not base_url:
             raise VaultAuthError(
                 "unknown",
-                f"environment variable {VAULT_URL_VAR} is not set",
+                f"environment variable {VAULT_URL_VAR} is not set "
+                "(and no .env file in the current directory provides it)",
             )
 
-        username = os.environ.get(VAULT_USERNAME_VAR)
+        username = cls._connection_setting(VAULT_USERNAME_VAR)
         if not username:
             raise VaultAuthError(
                 base_url,
-                f"environment variable {VAULT_USERNAME_VAR} is not set",
+                f"environment variable {VAULT_USERNAME_VAR} is not set "
+                "(and no .env file in the current directory provides it)",
             )
 
         password_cred = resolve_credential(VAULT_PASSWORD_CREDENTIAL)
