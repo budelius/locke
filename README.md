@@ -131,6 +131,12 @@ Vault placeholders are represented by `locke.PLACEHOLDER_VALUE` (`"FILL_ME"`).
 `VaultClient.set_secret(path, None)` / empty values create a placeholder while
 logging a warning.
 
+For Python vault commands, `LOCKE_VAULT_URL` and `LOCKE_VAULT_USERNAME` are
+read from the process environment first. In development and staging, they fall
+back to a `.env` file in the current directory; production deliberately ignores
+`.env`. `LOCKE_VAULT_PASSWORD` still uses the credential pipeline (OS keystore
+first) and is never loaded by this connection-settings fallback.
+
 ### Combined credentials (username + password)
 
 Credentials that pair a username with a password (database logins, SMTP
@@ -218,8 +224,8 @@ Your application picks its own credential names (e.g.
 | `LOCKE_ENV` | Override environment detection (`development`/`staging`/`production`) |
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable Windows Hello gating |
 | `LOCKE_BIO_CACHE_TTL` | Seconds to cache biometric verification (default 300) |
-| `LOCKE_VAULT_URL` | Vaultwarden server URL |
-| `LOCKE_VAULT_USERNAME` | Vaultwarden username |
+| `LOCKE_VAULT_URL` | Vaultwarden server URL (Python: current-directory `.env` fallback outside production) |
+| `LOCKE_VAULT_USERNAME` | Vaultwarden username (Python: current-directory `.env` fallback outside production) |
 | `LOCKE_VAULT_PASSWORD` | Vaultwarden password (prefer OS keystore) |
 | `LOCKE_OPENBAO_ADDR` | OpenBao server URL (Python only; falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
 | `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
@@ -237,6 +243,10 @@ locke/
 ├── templates/     # Example config files + bootstrap guide
 └── scripts/       # Version bumping helpers
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 

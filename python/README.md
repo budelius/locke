@@ -98,6 +98,14 @@ hard-coding the sentinel. `VaultClient.get_secret()` warns when it returns a
 placeholder; `VaultClient.set_secret(path, None)` or an empty value writes a
 placeholder and warns.
 
+### Vault connection settings from `.env`
+
+`LOCKE_VAULT_URL` and `LOCKE_VAULT_USERNAME` are read from the process
+environment first. In development and staging, Locke falls back to a `.env`
+file in the current working directory. Production ignores `.env` and requires
+real environment variables. The vault password is not read by this fallback:
+`LOCKE_VAULT_PASSWORD` continues through the keystore-first credential pipeline.
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -105,8 +113,8 @@ placeholder and warns.
 | `LOCKE_ENV` | Override environment detection |
 | `LOCKE_ENCRYPTION_KEY` | Encryption key (if not in keystore) |
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable biometric gating |
-| `LOCKE_VAULT_URL` | Vaultwarden server URL |
-| `LOCKE_VAULT_USERNAME` | Vaultwarden username |
+| `LOCKE_VAULT_URL` | Vaultwarden server URL; current-directory `.env` fallback outside production |
+| `LOCKE_VAULT_USERNAME` | Vaultwarden username; current-directory `.env` fallback outside production |
 | `LOCKE_OPENBAO_ADDR` | OpenBao server URL (falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
 | `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
 
