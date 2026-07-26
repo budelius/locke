@@ -124,7 +124,33 @@ locke vault set myapp/prod/api_key --password "sk_live_..."
 locke vault set myapp/prod/db_login --username admin --password "s3cr3t"
 locke vault get myapp/prod/db_login --field username   # -> admin
 locke vault get myapp/prod/db_login --field both        # -> admin:s3cr3t
+
+# Encrypt all project configs using project-root .env settings
+locke genkeys
+
+# Convert JSONC to strict JSON (also installed as locke-strip-jsonc)
+locke strip-jsonc config.development.jsonc config.development.json
 ```
+
+### Project-wide config generation
+
+The Python package installs `locke-genkeys` and `locke-strip-jsonc` on `PATH`
+alongside `locke`. Their equivalent subcommands are `locke genkeys` and
+`locke strip-jsonc`.
+
+`locke genkeys` searches from the current directory upward for the project's
+`.env`. Directory values may be absolute or relative to that project root:
+
+```dotenv
+LOCKE_INPUT_DIR=../shared-configs/my-project
+LOCKE_OUTPUT_DIR=.locke
+LOCKE_KEY_NAME=MYAPP_CONFIG_ENCRYPTION_KEY
+```
+
+Options override process environment variables, which override `.env`. The
+output directory defaults to `.locke`. The encryption key value itself still
+uses the selected credential source (`--key-source keystore` by default), not
+the `LOCKE_KEY_NAME` setting.
 
 Vault placeholders are represented by `locke.PLACEHOLDER_VALUE` (`"FILL_ME"`).
 `VaultClient.get_secret()` logs a warning when returning a placeholder, and
@@ -227,6 +253,9 @@ Your application picks its own credential names (e.g.
 | `LOCKE_VAULT_URL` | Vaultwarden server URL (Python: current-directory `.env` fallback outside production) |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username (Python: current-directory `.env` fallback outside production) |
 | `LOCKE_VAULT_PASSWORD` | Vaultwarden password (prefer OS keystore) |
+| `LOCKE_INPUT_DIR` | `locke genkeys` plaintext config directory (relative to project root if needed) |
+| `LOCKE_OUTPUT_DIR` | `locke genkeys` output directory (default `.locke`) |
+| `LOCKE_KEY_NAME` | Credential name used by `locke genkeys` |
 | `LOCKE_OPENBAO_ADDR` | OpenBao server URL (Python only; falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
 | `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
 | `LOCKE_OPENBAO_MOUNT` | OpenBao KV mount name (default `secret`) |

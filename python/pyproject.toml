@@ -40,6 +40,8 @@ dev = [
 
 [project.scripts]
 locke = "locke.cli.main:cli"
+locke-genkeys = "locke.cli.project_tools:genkeys"
+locke-strip-jsonc = "locke.cli.project_tools:strip_jsonc_command"
 
 [build-system]
 requires = ["hatchling"]

@@ -112,12 +112,15 @@ def env(
 from locke.cli.config_cmd import config  # noqa: E402
 from locke.cli.decrypt import decrypt  # noqa: E402
 from locke.cli.encrypt import encrypt  # noqa: E402
+from locke.cli.project_tools import genkeys, strip_jsonc_command  # noqa: E402
 from locke.cli.status import status  # noqa: E402
 
 cli.add_command(config)
 cli.add_command(decrypt)
 cli.add_command(encrypt)
+cli.add_command(genkeys)
 cli.add_command(status)
+cli.add_command(strip_jsonc_command)
 
 
 @cli.group()

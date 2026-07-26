@@ -73,7 +73,32 @@ locke openbao set myproject/staging/api_key --password "new-value"
 
 # Initialize project
 locke init --project myproject --tenant staging
+
+# Encrypt every config.{environment}.json[c] using project-root .env settings
+locke genkeys
+
+# Convert JSONC to strict JSON
+locke strip-jsonc input.jsonc output.json
 ```
+
+## Project tools on `PATH`
+
+Installing Locke provides `locke-genkeys` and `locke-strip-jsonc` as standalone
+commands, as well as `locke genkeys` and `locke strip-jsonc` subcommands.
+
+From any directory below a project root, `locke genkeys` finds the nearest
+ancestor containing `.env` and reads:
+
+```dotenv
+LOCKE_INPUT_DIR=../shared-configs/myproject
+LOCKE_OUTPUT_DIR=.locke
+LOCKE_KEY_NAME=MYPROJECT_CONFIG_ENCRYPTION_KEY
+```
+
+Relative paths are resolved from the discovered project root. CLI options take
+precedence over process environment variables, which take precedence over the
+project `.env`. `LOCKE_OUTPUT_DIR` defaults to `.locke`. Use `--project-root`
+to select a root explicitly.
 
 ## OpenBao KV
 
@@ -115,6 +140,9 @@ real environment variables. The vault password is not read by this fallback:
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable biometric gating |
 | `LOCKE_VAULT_URL` | Vaultwarden server URL; current-directory `.env` fallback outside production |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username; current-directory `.env` fallback outside production |
+| `LOCKE_INPUT_DIR` | `genkeys` plaintext config directory, absolute or project-root relative |
+| `LOCKE_OUTPUT_DIR` | `genkeys` output directory (default `.locke`) |
+| `LOCKE_KEY_NAME` | Credential name used by `genkeys` |
 | `LOCKE_OPENBAO_ADDR` | OpenBao server URL (falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
 | `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
 

@@ -3,6 +3,16 @@
 All notable changes to Locke are documented here. Versions are kept aligned
 across the Python, TypeScript, and Rust packages.
 
+## [Unreleased]
+
+### Added
+
+- Added Python `locke genkeys` / `locke-genkeys` commands to replace
+  project-local generation scripts. They discover the project-root `.env` and
+  read `LOCKE_INPUT_DIR`, `LOCKE_OUTPUT_DIR`, and `LOCKE_KEY_NAME` from it.
+- Added Python `locke strip-jsonc` / `locke-strip-jsonc` commands for converting
+  JSONC files to strict JSON.
+
 ## [0.9.1] - 2026-07-21
 
 ### Fixed
