@@ -5,6 +5,11 @@ across the Python, TypeScript, and Rust packages.
 
 ## [Unreleased]
 
+### Changed
+
+- Route Python, npm, and crates.io publish jobs to the protected Obachan staging
+  OSS runner.
+
 ### Added
 
 - Added Python `locke genkeys` / `locke-genkeys` commands to replace
