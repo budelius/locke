@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.padding import PKCS7
 from locke.env import is_production
 from locke.errors import SecretNotFoundError, VaultAuthError
 from locke.pipeline import _resolve_from_dotenv, resolve_credential
+from locke.settings import get_setting, settings_path
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,15 @@ def _decrypt_cipher_string(enc_string: str | None, enc_key: bytes, mac_key: byte
         return None
 
 
+def _unset_message(var_name: str, settings_key: str) -> str:
+    """Explain every place the setting could have come from, and how to fix it."""
+    return (
+        f"{var_name} is not set: no environment variable, no .env in the current "
+        f"directory, and no '{settings_key}' in {settings_path()}. "
+        f"Set it once for every directory with: locke config set {settings_key} <value>"
+    )
+
+
 class VaultClient:
     """Bitwarden-compatible API client for Vaultwarden."""
 
@@ -216,35 +226,33 @@ class VaultClient:
     def _connection_setting(var_name: str) -> str | None:
         """Resolve a vault connection setting (URL / username).
 
-        Process environment first; outside production, fall back to ./.env so
-        `locke vault …` works from a project directory without exporting the
-        variables into the shell first. The master password is NOT read here —
-        it always goes through resolve_credential() (keystore-first).
+        Precedence: process environment > ./.env (dev/staging only) > the
+        user-level settings file. The .env step keeps `locke vault …` working
+        from a project directory without exporting anything; the settings file
+        makes it work from *any* directory, including a git worktree that has
+        no .env of its own. The master password is NOT read here — it always
+        goes through resolve_credential() (keystore-first).
         """
         value = os.environ.get(var_name)
         if value:
             return value
-        if is_production():
-            return None
-        return _resolve_from_dotenv(var_name)
+        if not is_production():
+            value = _resolve_from_dotenv(var_name)
+            if value:
+                return value
+        return get_setting(var_name)
 
     @classmethod
     def connect(cls) -> "VaultClient":
         """Create an authenticated vault client using pipeline-resolved credentials."""
         base_url = cls._connection_setting(VAULT_URL_VAR)
         if not base_url:
-            raise VaultAuthError(
-                "unknown",
-                f"environment variable {VAULT_URL_VAR} is not set "
-                "(and no .env file in the current directory provides it)",
-            )
+            raise VaultAuthError("unknown", _unset_message(VAULT_URL_VAR, "vault_url"))
 
         username = cls._connection_setting(VAULT_USERNAME_VAR)
         if not username:
             raise VaultAuthError(
-                base_url,
-                f"environment variable {VAULT_USERNAME_VAR} is not set "
-                "(and no .env file in the current directory provides it)",
+                base_url, _unset_message(VAULT_USERNAME_VAR, "vault_email")
             )
 
         password_cred = resolve_credential(VAULT_PASSWORD_CREDENTIAL)

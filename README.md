@@ -160,8 +160,46 @@ logging a warning.
 For Python vault commands, `LOCKE_VAULT_URL` and `LOCKE_VAULT_USERNAME` are
 read from the process environment first. In development and staging, they fall
 back to a `.env` file in the current directory; production deliberately ignores
-`.env`. `LOCKE_VAULT_PASSWORD` still uses the credential pipeline (OS keystore
-first) and is never loaded by this connection-settings fallback.
+`.env`. Last comes the user-level settings file (see below), which applies in
+every environment. `LOCKE_VAULT_PASSWORD` still uses the credential pipeline
+(OS keystore first) and is never loaded by this connection-settings fallback.
+
+### User-level settings file
+
+`.env` is read from the current directory only, so vault commands break as soon
+as you run them somewhere else — a git worktree, a scheduled task, a different
+repository. The user-level settings file fixes that: it is the same role
+`~/.gitconfig` plays for git, and Locke reads it from any directory.
+
+```toml
+# ~/.config/locke/config.toml   (%APPDATA%\locke\config.toml on Windows)
+vault_url = "https://vault.example.com"
+vault_email = "ops@example.com"
+```
+
+```bash
+locke config set vault_url https://vault.example.com
+locke config set vault_email ops@example.com
+locke config show          # effective settings
+locke config path          # where the file lives
+```
+
+Resolution precedence is **environment variable → `./.env` (dev/staging only) →
+user-level settings file**, so nothing that worked before changes behaviour.
+
+The file is plaintext, so it holds only non-secret bootstrap settings. Writing a
+password key is refused, and a password key found in an existing file is ignored
+with a warning — the Vaultwarden master password belongs in the OS keystore:
+
+```bash
+locke keystore set LOCKE_VAULT_PASSWORD
+```
+
+`LOCKE_SETTINGS_FILE` overrides discovery with an explicit path (useful in CI).
+Discovery otherwise prefers the first file that exists among
+`%APPDATA%/locke/config.toml` (Windows only), `$XDG_CONFIG_HOME/locke/config.toml`,
+and `~/.config/locke/config.toml`; when none exists, the platform-native location
+is created.
 
 ### Combined credentials (username + password)
 
@@ -250,12 +288,13 @@ Your application picks its own credential names (e.g.
 | `LOCKE_ENV` | Override environment detection (`development`/`staging`/`production`) |
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable Windows Hello gating |
 | `LOCKE_BIO_CACHE_TTL` | Seconds to cache biometric verification (default 300) |
-| `LOCKE_VAULT_URL` | Vaultwarden server URL (Python: current-directory `.env` fallback outside production) |
-| `LOCKE_VAULT_USERNAME` | Vaultwarden username (Python: current-directory `.env` fallback outside production) |
+| `LOCKE_VAULT_URL` | Vaultwarden server URL (Python: `.env` fallback outside production, then `vault_url` in the user-level settings file) |
+| `LOCKE_VAULT_USERNAME` | Vaultwarden username (Python: `.env` fallback outside production, then `vault_email` in the user-level settings file) |
 | `LOCKE_VAULT_PASSWORD` | Vaultwarden password (prefer OS keystore) |
 | `LOCKE_INPUT_DIR` | `locke genkeys` plaintext config directory (relative to project root if needed) |
 | `LOCKE_OUTPUT_DIR` | `locke genkeys` output directory (default `.locke`) |
 | `LOCKE_KEY_NAME` | Credential name used by `locke genkeys` |
+| `LOCKE_SETTINGS_FILE` | Explicit path to the user-level settings file (overrides discovery) |
 | `LOCKE_OPENBAO_ADDR` | OpenBao server URL (Python only; falls back to `OPENBAO_ADDR`/`VAULT_ADDR`) |
 | `LOCKE_OPENBAO_TOKEN` | OpenBao token (falls back to `OPENBAO_TOKEN`/`VAULT_TOKEN`) |
 | `LOCKE_OPENBAO_MOUNT` | OpenBao KV mount name (default `secret`) |

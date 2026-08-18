@@ -53,3 +53,72 @@ def config_find(env_name: str | None, project_root: str) -> None:
             err=True,
         )
         sys.exit(1)
+
+
+@config.command(name="path")
+def config_path_cmd() -> None:
+    """Print the path of the user-level settings file.
+
+    This is the file Locke reads for non-secret bootstrap settings
+    (vault_url, vault_email) from any working directory. The path is printed
+    whether or not the file exists yet.
+
+    \b
+    Examples:
+        locke config path
+        cat "$(locke config path)"
+    """
+    from locke.settings import settings_path
+
+    click.echo(str(settings_path()))
+
+
+@config.command(name="show")
+def config_show() -> None:
+    """Show the effective user-level settings.
+
+    \b
+    Examples:
+        locke config show
+    """
+    from locke.settings import load_settings, settings_path
+
+    path = settings_path()
+    settings = load_settings()
+
+    if not path.is_file():
+        click.echo(f"# no settings file at {path}", err=True)
+    else:
+        click.echo(f"# {path}", err=True)
+
+    if not settings:
+        click.echo("# (no settings)", err=True)
+        return
+
+    for key in sorted(settings):
+        click.echo(f"{key} = {settings[key]}")
+
+
+@config.command(name="set")
+@click.argument("key")
+@click.argument("value")
+def config_set(key: str, value: str) -> None:
+    """Set one user-level setting, creating the file if needed.
+
+    Secrets are refused: the file is plaintext. Keep the Vaultwarden master
+    password in the OS keystore (locke keystore set LOCKE_VAULT_PASSWORD).
+
+    \b
+    Examples:
+        locke config set vault_url https://vault.example.com
+        locke config set vault_email ops@example.com
+    """
+    from locke.settings import set_setting
+
+    try:
+        path = set_setting(key, value)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    click.echo(f"set {key} in {path}", err=True)
