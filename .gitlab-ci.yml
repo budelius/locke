@@ -82,6 +82,21 @@ publish:npm:
     - npm install --ignore-scripts --no-package-lock   # fetch typescript; skip keytar native build
     - npm run build
     # npm CLI auto-detects the NPM_ID_TOKEN OIDC token; no token configured.
+    # Check the two preconditions first: without them `npm publish` fails with
+    # a bare ENEEDAUTH that says nothing about which half is missing. The
+    # v0.10.0 release failed here with npm 11.7.0 and an issued token, which
+    # points at the npmjs.com side (see the Trusted Publisher note above).
+    - |
+      if [ -z "$NPM_ID_TOKEN" ]; then
+        echo "NPM_ID_TOKEN was not issued -- check id_tokens/environment on this job." >&2
+        exit 1
+      fi
+      NPM_MAJOR_MINOR=$(npm --version | cut -d. -f1,2)
+      echo "npm $(npm --version); OIDC id_token present (${#NPM_ID_TOKEN} chars)"
+      case "$NPM_MAJOR_MINOR" in
+        11.[5-9]|11.[1-9][0-9]|1[2-9].*|[2-9][0-9].*) ;;
+        *) echo "npm $(npm --version) is below the 11.5.1 required for OIDC trusted publishing" >&2; exit 1 ;;
+      esac
     - npm publish --access public --ignore-scripts
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
@@ -103,7 +118,14 @@ publish:crates:
     CRATES_IO_ID_TOKEN:
       aud: crates.io
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends curl jq pkg-config libssl-dev libdbus-1-dev
+    # This runner cannot let apt drop privileges to the _apt user -- its http
+    # method dies with "setegid/seteuid/setgroups: Operation not permitted".
+    # apt still exits 0, so the v0.10.0 release only discovered the missing
+    # packages later, as `jq: command not found` mid token-exchange.
+    - apt-get -o APT::Sandbox::User=root update
+    - apt-get -o APT::Sandbox::User=root install -y --no-install-recommends curl jq pkg-config libssl-dev libdbus-1-dev
+    # Assert the side effect, not the exit code.
+    - for t in curl jq pkg-config; do command -v "$t" >/dev/null || { echo "$t missing after apt install" >&2; exit 1; }; done
   script:
     - cd rust
     # Exchange the GitLab OIDC token for a short-lived crates.io publish token.
