@@ -172,3 +172,101 @@ class TestGlabAuthTokenScope:
                 patch("subprocess.run", side_effect=self._glab_only_auth_token(name))
             )
             assert _resolve_from_glab(name) == "glpat-THE-GITLAB-TOKEN"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            # Real obachan credentials (src/obachan/cli/secrets.py). The admin
+            # token rotates project access tokens through the GitLab API; the
+            # personal token `glab auth token` returns is a different identity
+            # with different rights.
+            "GITLAB_ADMIN_TOKEN",
+            "OBACHAN_PROD_GITLAB_ADMIN_TOKEN",
+            "GITLAB_PROJECT_ACCESS_TOKEN_ID",
+            # Other GitLab credentials that are not the CLI's own token.
+            "GITLAB_DEPLOY_TOKEN",
+            "GITLAB_REGISTRY_TOKEN",
+            "GITLAB_RUNNER_TOKEN",
+            "GITLAB_JOB_TOKEN",
+            "GITLAB_TRIGGER_TOKEN",
+            "GITLAB_GROUP_TOKEN",
+            "GITLAB_WEBHOOK_TOKEN",
+            "GITLAB_IMPERSONATION_TOKEN",
+            "GITLAB_BOT_TOKEN",
+        ],
+    )
+    def test_other_gitlab_credentials_are_refused(self, name):
+        """Narrowing to GitLab names left the same bug inside the GitLab family.
+
+        `glab auth token` returns the CLI's own personal token. Answering a
+        deploy/registry/runner/admin credential with it is the same silent
+        substitution, one blast radius smaller.
+        """
+        from locke.pipeline import _resolve_from_glab
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_only_auth_token(name))
+            )
+            assert _resolve_from_glab(name) is None
+
+    @pytest.mark.parametrize(
+        "name",
+        ["GITLAB_URL", "GITLAB_USERNAME", "GITLAB_PROJECT", "GITLAB_REGISTRY_PASSWORD"],
+    )
+    def test_gitlab_names_that_are_not_tokens_are_refused(self, name):
+        """A URL, a username, or a password is never what `auth token` returns."""
+        from locke.pipeline import _resolve_from_glab
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_only_auth_token(name))
+            )
+            assert _resolve_from_glab(name) is None
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "GITLAB_TOKEN",
+            "GLAB_TOKEN",
+            "OBACHAN_PROD_GITLAB_API_TOKEN",
+            "GITLAB_ACCESS_TOKEN",
+            "GITLAB_AUTH_TOKEN",
+            "GITLAB_PERSONAL_ACCESS_TOKEN",
+        ],
+    )
+    def test_the_clis_own_token_still_resolves(self, name):
+        from locke.pipeline import _resolve_from_glab
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_only_auth_token(name))
+            )
+            assert _resolve_from_glab(name) == "glpat-THE-GITLAB-TOKEN"
+
+    def test_resolving_from_glab_is_warned_about(self, caplog):
+        """The incident ran ~10h unseen because glab answered silently.
+
+        `.env` already warns when it answers; glab is a weaker source still
+        (it is not even name-addressed) and must be at least as loud.
+        """
+        import logging
+
+        from locke.pipeline import _resolve_from_glab
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch(
+                    "subprocess.run",
+                    side_effect=self._glab_only_auth_token("GITLAB_TOKEN"),
+                )
+            )
+            with caplog.at_level(logging.WARNING, logger="locke.pipeline"):
+                assert _resolve_from_glab("GITLAB_TOKEN") == "glpat-THE-GITLAB-TOKEN"
+
+        assert "glab auth token" in caplog.text
+        assert "GITLAB_TOKEN" in caplog.text

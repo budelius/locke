@@ -12,6 +12,7 @@ Dev/staging environments warn and attempt fallback.
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -66,15 +67,54 @@ def _resolve_from_env(name: str) -> str | None:
     return value
 
 
-def _is_gitlab_name(name: str) -> bool:
-    """True if ``name`` denotes a GitLab credential.
+# Words that mark a GitLab credential as something OTHER than the personal
+# token `glab auth token` returns. GitLab issues many token kinds against the
+# same host -- deploy, registry, runner, group, trigger, job, impersonation --
+# and an admin token is a different identity with different rights.
+_NON_PERSONAL_GITLAB_ROLES = frozenset(
+    {
+        "ADMIN",
+        "BOT",
+        "DEPLOY",
+        "GROUP",
+        "IMPERSONATION",
+        "JOB",
+        "PROJECT",
+        "REGISTRY",
+        "RUNNER",
+        "TRIGGER",
+        "WEBHOOK",
+    }
+)
 
-    Deliberately narrow: only names mentioning GitLab qualify for the
-    `glab auth token` fallback, which is name-blind and would otherwise
-    substitute the GitLab token for an unrelated provider's credential.
+# Words marking a name as not a token at all (an id, a URL, an account).
+_NOT_A_TOKEN = frozenset({"ID", "URL", "HOST", "USER", "USERNAME", "EMAIL", "PASSWORD"})
+
+
+def _is_glab_auth_token_name(name: str) -> bool:
+    """True only if ``name`` denotes the personal token `glab auth token` returns.
+
+    `glab auth token` is name-blind: it hands back whichever token the CLI
+    authenticated with, no matter what was asked for. It may therefore answer
+    only names that mean *that* token.
+
+    Matching merely "mentions GitLab" is not enough. GitLab issues several
+    kinds of credential against the same host, so `GITLAB_ADMIN_TOKEN` (used
+    to rotate project access tokens) or `GITLAB_DEPLOY_TOKEN` would otherwise
+    be answered with the personal token -- the same silent substitution that
+    sent a GitLab token to api.hetzner.cloud, one blast radius smaller.
+
+    Prefixed names still qualify (``OBACHAN_PROD_GITLAB_API_TOKEN``): callers
+    namespace credentials per project and environment.
     """
-    upper = name.upper()
-    return "GITLAB" in upper or "GLAB" in upper
+    words = set(re.split(r"[^A-Z0-9]+", name.upper()))
+    if not words & {"GITLAB", "GLAB"}:
+        return False
+    if "TOKEN" not in words:
+        return False
+    if words & _NON_PERSONAL_GITLAB_ROLES:
+        return False
+    return not words & _NOT_A_TOKEN
 
 
 def _resolve_from_glab(name: str) -> str | None:
@@ -104,12 +144,12 @@ def _resolve_from_glab(name: str) -> str | None:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    # `glab auth token` returns THE GitLab token regardless of what was asked
-    # for, so it may only answer names that actually denote a GitLab
-    # credential. Gating on "TOKEN" made it answer every *_TOKEN name --
-    # HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN, ... -- so any keystore miss silently
-    # handed the caller a GitLab token and shipped it to an unrelated API.
-    if _is_gitlab_name(name):
+    # `glab auth token` returns THE personal GitLab token regardless of what
+    # was asked for, so it may only answer names that mean that token. Gating
+    # on "TOKEN" made it answer every *_TOKEN name -- HCLOUD_TOKEN,
+    # CLOUDFLARE_API_TOKEN, ... -- so any keystore miss silently handed the
+    # caller a GitLab token and shipped it to an unrelated API.
+    if _is_glab_auth_token_name(name):
         try:
             result = subprocess.run(
                 ["glab", "auth", "token"],
@@ -118,7 +158,17 @@ def _resolve_from_glab(name: str) -> str | None:
                 timeout=10,
             )
             if result.returncode == 0 and result.stdout.strip():
-                logger.debug("Credential '%s' found via glab auth token", name)
+                # Loud on purpose. This backend is not name-addressed, so an
+                # answer here means a stronger source (keystore, env) missed --
+                # exactly the condition that went unnoticed for ~10h during the
+                # 2026-08-17 incident.
+                logger.warning(
+                    "Credential '%s' resolved from `glab auth token` -- the GitLab "
+                    "CLI's own token, returned without regard to the name asked "
+                    "for. A stronger backend (OS keystore, environment) did not "
+                    "answer. Verify this is really the credential you want.",
+                    name,
+                )
                 return result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass

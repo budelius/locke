@@ -5,6 +5,27 @@ across the Python, TypeScript, and Rust packages.
 
 ## [Unreleased]
 
+### Security
+
+- `glab auth token` may no longer answer arbitrary credential names. It returns
+  the GitLab CLI's own personal token regardless of what was requested, but was
+  gated on `"TOKEN" in name`, so any `*_TOKEN` credential resolved to the GitLab
+  token whenever the keystore stage missed — routine on Windows, where Hello
+  cannot prompt while the workstation is locked. Callers saw a plausible
+  credential and sent it to whichever API they were talking to; observed as 22
+  Authorization headers to api.hetzner.cloud over ~10h on 2026-08-17.
+- The same substitution inside the GitLab family is closed too: only names
+  denoting the CLI's *own* token qualify. GitLab issues deploy, registry,
+  runner, group, trigger, job, and impersonation tokens against the same host,
+  and an admin token is a different identity — `GITLAB_ADMIN_TOKEN` (which
+  rotates project access tokens) and `GITLAB_PROJECT_ACCESS_TOKEN_ID` are now
+  refused rather than answered with the personal token. Prefixed names such as
+  `OBACHAN_PROD_GITLAB_API_TOKEN` still resolve.
+- Resolving a credential from `glab auth token` now logs a WARNING. This backend
+  is not name-addressed, so an answer means a stronger source did not respond —
+  the condition that went unnoticed for ~10h during that incident. `.env`
+  already warned; glab now does too.
+
 ### Changed
 
 - Route Python, npm, and crates.io publish jobs to the protected Obachan staging
