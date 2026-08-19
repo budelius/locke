@@ -66,6 +66,17 @@ def _resolve_from_env(name: str) -> str | None:
     return value
 
 
+def _is_gitlab_name(name: str) -> bool:
+    """True if ``name`` denotes a GitLab credential.
+
+    Deliberately narrow: only names mentioning GitLab qualify for the
+    `glab auth token` fallback, which is name-blind and would otherwise
+    substitute the GitLab token for an unrelated provider's credential.
+    """
+    upper = name.upper()
+    return "GITLAB" in upper or "GLAB" in upper
+
+
 def _resolve_from_glab(name: str) -> str | None:
     """Attempt to resolve credential from GitLab CLI (`glab`).
 
@@ -93,8 +104,12 @@ def _resolve_from_glab(name: str) -> str | None:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    # For auth-related tokens, try glab auth token
-    if "TOKEN" in name.upper() or "GLAB" in name.upper():
+    # `glab auth token` returns THE GitLab token regardless of what was asked
+    # for, so it may only answer names that actually denote a GitLab
+    # credential. Gating on "TOKEN" made it answer every *_TOKEN name --
+    # HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN, ... -- so any keystore miss silently
+    # handed the caller a GitLab token and shipped it to an unrelated API.
+    if _is_gitlab_name(name):
         try:
             result = subprocess.run(
                 ["glab", "auth", "token"],
