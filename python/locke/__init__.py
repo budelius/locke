@@ -36,7 +36,7 @@ def __getattr__(name: str):
         return getattr(openbao, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.8.0"
+__version__ = "0.10.0"
 __all__ = [
     "CredentialPair",
     "VaultClient",

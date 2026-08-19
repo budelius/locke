@@ -3,10 +3,23 @@
 All notable changes to Locke are documented here. Versions are kept aligned
 across the Python, TypeScript, and Rust packages.
 
-## [Unreleased]
+## [0.10.0] - 2026-08-19
 
 ### Security
 
+- An OS keystore that could not be *consulted* no longer licenses a name-blind
+  backend to answer in its place. Biometric gating (Windows Hello cannot prompt
+  while the workstation is locked) made "the keystore does not have it" and "the
+  keystore could not be asked" indistinguishable, and the pipeline fell through
+  to `glab auth token` for a credential that was sitting in the store. The glab
+  backend is now skipped in that case, and the resulting
+  `CredentialNotFoundError` says the keystore was unreachable and points at
+  `LOCKE_USE_BIOMETRIC=false` — rather than reading as "never stored", the
+  misreading that cost ~10h of misdirected debugging.
+- `glab variable get` is now opt-in via `LOCKE_GLAB_VARIABLES=1` and warns when
+  it answers. It resolves against whichever GitLab project the current directory
+  maps to, so the same credential name yielded different values depending on
+  where the process happened to run — across environments, a credential swap.
 - `glab auth token` may no longer answer arbitrary credential names. It returns
   the GitLab CLI's own personal token regardless of what was requested, but was
   gated on `"TOKEN" in name`, so any `*_TOKEN` credential resolved to the GitLab

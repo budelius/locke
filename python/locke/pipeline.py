@@ -13,6 +13,7 @@ Dev/staging environments warn and attempt fallback.
 import logging
 import os
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -26,6 +27,10 @@ from locke.keystore import get_credential as keystore_get
 
 logger = logging.getLogger(__name__)
 
+#: Opt-in for the cwd-scoped `glab variable get` lookup.
+GLAB_VARIABLES_VAR = "LOCKE_GLAB_VARIABLES"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
 
 @dataclass
 class Credential:
@@ -37,26 +42,54 @@ class Credential:
     resolved_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _try_keystore(name: str) -> tuple[str | None, bool]:
+    """Resolve from the OS keystore, reporting whether it could be consulted.
+
+    Returns ``(value, unavailable)``. ``unavailable`` is True when the keystore
+    could not answer for an *environmental* reason -- biometric gating, most
+    often Windows Hello being unable to prompt while the workstation is locked.
+
+    That distinction is the point. "The keystore does not have it" and "the
+    keystore could not be asked" look identical to a caller, but only the first
+    is evidence the credential is absent. Treating the second as a miss is what
+    let weaker backends answer for a credential that was sitting right there.
+    """
+    try:
+        return keystore_get(name), False
+    except (BiometricDeniedError, BiometricUnavailableError) as exc:
+        logger.warning(
+            "Biometric gating prevented keystore access for '%s': %s - "
+            "trying remaining name-addressed backends. Set "
+            "LOCKE_USE_BIOMETRIC=false for unattended runs (the OS credential "
+            "store stays readable while the workstation is locked; only the "
+            "biometric prompt does not).",
+            name, exc,
+        )
+        return None, True
+    except Exception:
+        logger.debug("Keystore lookup failed for '%s'", name)
+        return None, False
+
+
+#: Set by the keystore backend when it could not be consulted at all (as
+#: opposed to being consulted and not having the credential). A ContextVar
+#: rather than a module global so concurrent resolutions -- threads, asyncio
+#: tasks -- cannot read each other's outcome.
+_keystore_unavailable: ContextVar[bool] = ContextVar(
+    "locke_keystore_unavailable", default=False
+)
+
+
 def _resolve_from_keystore(name: str) -> str | None:
     """Attempt to resolve credential from OS keystore.
 
-    Biometric errors (denied / unavailable) are caught and treated as
-    "keystore unavailable" so the pipeline can fall through to env var,
-    GitLab CLI, and .env backends.  This enables graceful degradation in
-    non-interactive shells where Windows Hello cannot prompt.
+    Biometric errors (denied / unavailable) are caught so the pipeline can fall
+    through, and recorded in :data:`_keystore_unavailable` so
+    :func:`resolve_credential` can tell "not stored" from "could not ask".
     """
-    try:
-        return keystore_get(name)
-    except (BiometricDeniedError, BiometricUnavailableError) as exc:
-        logger.warning(
-            "Biometric gating prevented keystore access for '%s': %s — "
-            "trying remaining backends.",
-            name, exc,
-        )
-        return None
-    except Exception:
-        logger.debug("Keystore lookup failed for '%s'", name)
-        return None
+    value, unavailable = _try_keystore(name)
+    _keystore_unavailable.set(unavailable)
+    return value
 
 
 def _resolve_from_env(name: str) -> str | None:
@@ -130,19 +163,29 @@ def _resolve_from_glab(name: str) -> str | None:
         logger.debug("glab CLI not found in PATH")
         return None
 
-    # Try glab variable get first (for project-level variables)
-    try:
-        result = subprocess.run(
-            ["glab", "variable", "get", name],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            logger.debug("Credential '%s' found via glab variable get", name)
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    # `glab variable get` resolves against whichever GitLab project the current
+    # directory maps to, so the same name yields different values depending on
+    # where the process happens to be running -- across environments, that is a
+    # credential swap. It is name-addressed, so it is not the `auth token` bug,
+    # but it is still an answer nobody asked this checkout for. Opt in.
+    if os.environ.get(GLAB_VARIABLES_VAR, "").strip().lower() in _TRUTHY:
+        try:
+            result = subprocess.run(
+                ["glab", "variable", "get", name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                logger.warning(
+                    "Credential '%s' resolved from `glab variable get`, i.e. from "
+                    "the GitLab project the current directory maps to. Verify it "
+                    "is the right project and environment.",
+                    name,
+                )
+                return result.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
     # `glab auth token` returns THE personal GitLab token regardless of what
     # was asked for, so it may only answer names that mean that token. Gating
@@ -221,6 +264,11 @@ _BACKENDS: list[tuple[str, callable]] = [
     ("dotenv", _resolve_from_dotenv),
 ]
 
+# Backends that can return a value for a name they did not look up. They are
+# acceptable as a last resort, but never as a stand-in for a keystore that was
+# merely unreachable.
+_NAME_BLIND_BACKENDS = frozenset({"gitlab_cli"})
+
 
 def resolve_credential(name: str) -> Credential:
     """Resolve a named credential through the priority pipeline.
@@ -231,14 +279,30 @@ def resolve_credential(name: str) -> Credential:
     In dev/staging: raises CredentialNotFoundError but logs a warning.
     """
     backends_searched: list[str] = []
+    keystore_unavailable = False
+    _keystore_unavailable.set(False)
 
     for backend_name, resolver in _BACKENDS:
         # .env fallback is only available in non-production
         if backend_name == "dotenv" and is_production():
             continue
 
+        if backend_name in _NAME_BLIND_BACKENDS and keystore_unavailable:
+            # The authoritative, name-addressed source could not be consulted.
+            # Letting a name-blind one answer in its place is how a GitLab
+            # token ended up in Authorization headers to api.hetzner.cloud.
+            logger.warning(
+                "Skipping the %s backend for '%s': the OS keystore could not be "
+                "consulted, and %s can return a value for a name it did not look "
+                "up. Resolve the keystore problem rather than trusting this.",
+                backend_name, name, backend_name,
+            )
+            continue
+
         backends_searched.append(backend_name)
         value = resolver(name)
+        if backend_name == "keystore":
+            keystore_unavailable = _keystore_unavailable.get()
 
         if value is not None:
             logger.info(
@@ -247,9 +311,19 @@ def resolve_credential(name: str) -> Credential:
             return Credential(name=name, value=value, source=backend_name)
 
     env = detect_environment()
-    if is_production():
-        raise CredentialNotFoundError(name, backends_searched)
-    else:
+    if keystore_unavailable:
+        # Do not let this read as "the credential was never stored" -- that
+        # misreading cost ~10h of misdirected debugging on 2026-08-17.
+        raise CredentialNotFoundError(
+            name,
+            backends_searched,
+            detail=(
+                "the OS keystore could not be consulted (biometric gating), so "
+                "the credential may well be stored and simply unreachable. For "
+                "unattended runs set LOCKE_USE_BIOMETRIC=false"
+            ),
+        )
+    if not is_production():
         logger.warning(
             "Credential '%s' not found in any backend (env=%s). "
             "Backends searched: %s",
@@ -257,4 +331,4 @@ def resolve_credential(name: str) -> Credential:
             env,
             ", ".join(backends_searched),
         )
-        raise CredentialNotFoundError(name, backends_searched)
+    raise CredentialNotFoundError(name, backends_searched)

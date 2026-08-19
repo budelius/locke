@@ -270,3 +270,132 @@ class TestGlabAuthTokenScope:
 
         assert "glab auth token" in caplog.text
         assert "GITLAB_TOKEN" in caplog.text
+
+
+class TestKeystoreUnavailableSuppressesNameBlindBackends:
+    """An environmental keystore failure is not evidence the credential is absent.
+
+    Windows Hello cannot prompt while the workstation is locked, so the keystore
+    stage returns nothing for a credential that is sitting right there. Falling
+    through to a *name-addressed* backend (env, .env) is fine -- they answer the
+    question asked. Falling through to `glab auth token`, which answers whatever
+    it likes, is how the GitLab token reached api.hetzner.cloud on 2026-08-17.
+    """
+
+    @staticmethod
+    def _glab_answers_everything():
+        def run(cmd, **kwargs):
+            from unittest.mock import Mock
+
+            if cmd[:3] == ["glab", "variable", "get"]:
+                return Mock(returncode=1, stdout="")
+            if cmd[:3] == ["glab", "auth", "token"]:
+                return Mock(returncode=0, stdout="glpat-THE-GITLAB-TOKEN\n")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        return run
+
+    def test_glab_is_skipped_when_biometrics_blocked_the_keystore(self, monkeypatch):
+        monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "locke.pipeline.keystore_get",
+                    side_effect=BiometricUnavailableError("locked"),
+                )
+            )
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_answers_everything())
+            )
+            with pytest.raises(CredentialNotFoundError):
+                resolve_credential("GITLAB_TOKEN")
+
+    def test_glab_still_answers_when_the_keystore_merely_lacks_the_name(
+        self, monkeypatch
+    ):
+        """A real miss (credential absent) keeps the existing fallback behaviour."""
+        monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(patch("locke.pipeline.keystore_get", return_value=None))
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_answers_everything())
+            )
+            cred = resolve_credential("GITLAB_TOKEN")
+
+        assert cred.value == "glpat-THE-GITLAB-TOKEN"
+        assert cred.source == "gitlab_cli"
+
+    def test_name_addressed_backends_still_answer(self, monkeypatch):
+        """env/.env look up the name they were given -- they stay in the chain."""
+        monkeypatch.setenv("HCLOUD_TOKEN", "real-hetzner-token")
+        with patch(
+            "locke.pipeline.keystore_get",
+            side_effect=BiometricDeniedError("denied"),
+        ):
+            cred = resolve_credential("HCLOUD_TOKEN")
+
+        assert cred.value == "real-hetzner-token"
+        assert cred.source == "env_var"
+
+    def test_the_not_found_error_says_the_keystore_was_unreachable(self, monkeypatch):
+        """'not found' read as 'never stored'. It must say what actually happened."""
+        monkeypatch.delenv("HCLOUD_TOKEN", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "locke.pipeline.keystore_get",
+                    side_effect=BiometricUnavailableError("Hello cannot prompt"),
+                )
+            )
+            stack.enter_context(patch("shutil.which", return_value=None))
+            with pytest.raises(CredentialNotFoundError) as excinfo:
+                resolve_credential("HCLOUD_TOKEN")
+
+        message = str(excinfo.value)
+        assert "keystore" in message.lower()
+        assert "LOCKE_USE_BIOMETRIC" in message
+
+
+class TestGlabVariableGetIsOptIn:
+    """`glab variable get` resolves against whatever project cwd maps to.
+
+    obachan manages staging and prod from one workstation, so a CI variable
+    picked up from the wrong checkout is a cross-environment credential swap.
+    It is name-addressed, so it is not the same bug as `auth token` -- but it
+    is still an answer nobody asked this repository for.
+    """
+
+    @staticmethod
+    def _variable_get_hits():
+        def run(cmd, **kwargs):
+            from unittest.mock import Mock
+
+            if cmd[:3] == ["glab", "variable", "get"]:
+                return Mock(returncode=0, stdout="value-from-some-project\n")
+            return Mock(returncode=1, stdout="")
+
+        return run
+
+    def test_disabled_by_default(self, monkeypatch):
+        from locke.pipeline import _resolve_from_glab
+
+        monkeypatch.delenv("LOCKE_GLAB_VARIABLES", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._variable_get_hits())
+            )
+            assert _resolve_from_glab("HCLOUD_TOKEN") is None
+
+    def test_enabled_by_opt_in(self, monkeypatch):
+        from locke.pipeline import _resolve_from_glab
+
+        monkeypatch.setenv("LOCKE_GLAB_VARIABLES", "1")
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._variable_get_hits())
+            )
+            assert _resolve_from_glab("HCLOUD_TOKEN") == "value-from-some-project"

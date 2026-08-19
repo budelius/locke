@@ -11,12 +11,21 @@ class LockeError(Exception):
 class CredentialNotFoundError(LockeError):
     """No backend has the requested credential (production) or all backends exhausted."""
 
-    def __init__(self, name: str, backends_searched: list[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        backends_searched: list[str],
+        detail: str | None = None,
+    ) -> None:
         self.name = name
         self.backends_searched = backends_searched
-        super().__init__(
+        self.detail = detail
+        message = (
             f"Credential '{name}' not found in backends: {', '.join(backends_searched)}"
         )
+        if detail:
+            message = f"{message} - {detail}"
+        super().__init__(message)
 
 
 class DecryptionError(LockeError):
