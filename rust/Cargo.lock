@@ -921,7 +921,7 @@ dependencies = [
 
 [[package]]
 name = "locke-creds"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "aes",
  "aes-gcm",

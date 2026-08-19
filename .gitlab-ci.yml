@@ -79,8 +79,8 @@ publish:npm:
     - npm install -g npm@latest   # OIDC trusted publishing needs npm >= 11.5.1
   script:
     - cd typescript
-    - yarn install --immutable --mode=skip-build   # fetch typescript; skip keytar native build
-    - yarn build
+    - npm install --ignore-scripts --no-package-lock   # fetch typescript; skip keytar native build
+    - npm run build
     # npm CLI auto-detects the NPM_ID_TOKEN OIDC token; no token configured.
     - npm publish --access public --ignore-scripts
   rules:
