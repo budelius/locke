@@ -138,7 +138,7 @@ def _decrypt_encrypted_string(enc_string: str, enc_key: bytes, mac_key: bytes) -
     # Parse type prefix
     parts = enc_string.split(".", 1)
     if len(parts) != 2:
-        raise ValueError(f"invalid encrypted string format: no type prefix")
+        raise ValueError("invalid encrypted string format: no type prefix")
     enc_type = int(parts[0])
     if enc_type != 2:
         raise ValueError(f"unsupported encryption type {enc_type} (expected 2)")
@@ -188,7 +188,7 @@ def _decrypt_cipher_string(enc_string: str | None, enc_key: bytes, mac_key: byte
         return None
     try:
         return _decrypt_encrypted_string(enc_string, enc_key, mac_key).decode("utf-8")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- server-supplied ciphertext, any codec error is "undecryptable"
         logger.debug("Failed to decrypt cipher field: %s", exc)
         return None
 
@@ -266,7 +266,7 @@ class VaultClient:
         """
         if not base_url:
             raise VaultAuthError(
-                "unknown", f"empty base_url passed to connect_with()",
+                "unknown", "empty base_url passed to connect_with()",
             )
         if not username:
             raise VaultAuthError(

@@ -5,7 +5,6 @@ Shows key resolution, config file discovery, and environment detection.
 """
 
 import os
-import sys
 from pathlib import Path
 
 import click
@@ -159,7 +158,7 @@ def _detect_env_source() -> str:
 def _check_keystore(key_name: str) -> None:
     """Check OS keystore for the credential."""
     try:
-        from locke.keystore import get_credential, SERVICE_NAME
+        from locke.keystore import SERVICE_NAME, get_credential
         value = get_credential(key_name)
         if value:
             click.echo(
@@ -169,11 +168,11 @@ def _check_keystore(key_name: str) -> None:
         else:
             click.echo(f"    [--] OS keystore ({SERVICE_NAME}/{key_name}): not found")
     except BiometricDeniedError:
-        click.echo(f"    [!!] OS keystore: biometric verification denied")
+        click.echo("    [!!] OS keystore: biometric verification denied")
     except BiometricUnavailableError:
-        click.echo(f"    [!!] OS keystore: biometric not available")
+        click.echo("    [!!] OS keystore: biometric not available")
     except KeystoreUnavailableError:
-        click.echo(f"    [--] OS keystore: service unavailable")
+        click.echo("    [--] OS keystore: service unavailable")
     except Exception as exc:
         click.echo(f"    [--] OS keystore: error ({exc})")
 
@@ -191,16 +190,16 @@ def _check_glab(key_name: str) -> None:
     """Check GitLab CLI availability."""
     import shutil
     if shutil.which("glab"):
-        click.echo(f"    [..] GitLab CLI (glab): available (not checked)")
+        click.echo("    [..] GitLab CLI (glab): available (not checked)")
     else:
-        click.echo(f"    [--] GitLab CLI (glab): not in PATH")
+        click.echo("    [--] GitLab CLI (glab): not in PATH")
 
 
 def _check_dotenv(key_name: str) -> None:
     """Check .env file for the credential."""
     dotenv_path = Path.cwd() / ".env"
     if not dotenv_path.is_file():
-        click.echo(f"    [--] .env file: not found")
+        click.echo("    [--] .env file: not found")
         return
 
     try:
@@ -215,4 +214,4 @@ def _check_dotenv(key_name: str) -> None:
                     return
         click.echo(f"    [--] .env file: {key_name} not found")
     except OSError:
-        click.echo(f"    [--] .env file: read error")
+        click.echo("    [--] .env file: read error")

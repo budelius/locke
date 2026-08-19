@@ -5,17 +5,17 @@ import sys
 
 import click
 
+from locke.errors import (
+    BiometricDeniedError,
+    BiometricUnavailableError,
+    KeystoreUnavailableError,
+)
 from locke.keystore import (
     delete_credential,
     find_legacy_credentials,
     get_credential,
     migrate_credential,
     set_credential,
-)
-from locke.errors import (
-    BiometricDeniedError,
-    BiometricUnavailableError,
-    KeystoreUnavailableError,
 )
 
 

@@ -50,5 +50,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["locke"]
 
+[tool.ruff.lint.per-file-ignores]
+# CLI entrypoints deliberately catch anything so a failure becomes a clean
+# message plus a non-zero exit rather than a traceback. Library code does not
+# get this exemption: every blind except under locke/ carries its own noqa and
+# a reason, which is how the keystore swallow behind the 2026-08-17 credential
+# substitution was found.
+"locke/cli/*.py" = ["BLE001"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

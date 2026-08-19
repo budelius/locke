@@ -6,9 +6,9 @@ from pathlib import Path
 
 import click
 
+from locke.cli._key_util import get_key
 from locke.crypto import encrypt_config
 from locke.jsonc import parse_jsonc
-from locke.cli._key_util import get_key
 
 ENVIRONMENTS = ("development", "staging", "production")
 

@@ -10,16 +10,12 @@ import pytest
 from locke.errors import (
     BiometricDeniedError,
     BiometricUnavailableError,
-    KeystoreUnavailableError,
 )
 from locke.keystore import (
-    SERVICE_NAME,
     _bio_cache_valid,
     _bio_session_ttl,
     _biometric_enabled,
     _compute_session_hmac,
-    _get_machine_id,
-    _get_username,
     _is_interactive,
     _legacy_lookups_for,
     _read_bio_session,
@@ -34,7 +30,6 @@ from locke.keystore import (
     set_credential,
     verify_windows_hello,
 )
-
 
 # ---------------------------------------------------------------------------
 # Biometric config helpers

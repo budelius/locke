@@ -65,7 +65,11 @@ def status() -> None:
         click.echo(f"  Session:          corrupt ({exc})")
         return
 
-    ts = datetime.datetime.fromtimestamp(verified_at).strftime("%Y-%m-%d %H:%M:%S")
+    ts = (
+        datetime.datetime.fromtimestamp(verified_at, tz=datetime.UTC)
+        .astimezone()
+        .strftime("%Y-%m-%d %H:%M:%S")
+    )
     age = time.time() - verified_at
     remaining = _bio_session_ttl() - age
 
@@ -80,7 +84,7 @@ def status() -> None:
     if remaining > 0:
         click.echo(f"  Remaining:        {remaining:.0f}s ({remaining / 3600:.1f}h)")
     else:
-        click.echo(f"  Remaining:        expired")
+        click.echo("  Remaining:        expired")
     click.echo(f"  Machine match:    {machine_ok}")
     click.echo(f"  User match:       {user_ok}")
     click.echo(f"  HMAC intact:      {hmac_ok}")

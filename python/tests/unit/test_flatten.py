@@ -2,8 +2,8 @@
 
 import pytest
 
-from locke.flatten import flatten_config
 from locke.errors import CollisionError
+from locke.flatten import flatten_config
 from tests.conftest import load_test_vectors
 
 VECTORS = load_test_vectors("flatten.json")["vectors"]
