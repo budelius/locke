@@ -3,6 +3,36 @@
 All notable changes to Locke are documented here. Versions are kept aligned
 across the Python, TypeScript, and Rust packages.
 
+## [Unreleased]
+
+### Security
+
+- An unexpected OS-keystore failure (a broken keyring backend, a missing
+  library, a permissions problem) is now treated as "the keystore could not be
+  consulted" rather than "the credential is absent", the same as biometric
+  gating already was. It previously fell through to weaker backends -- the
+  identical silent degradation behind the 2026-08-17 credential substitution,
+  reached by a different exception. Found by justifying each blind `except`
+  individually while clearing the lint backlog.
+
+### Fixed
+
+- `publish:crates` installs its dependencies again: this runner cannot let apt
+  drop privileges to `_apt`, and apt exited 0 anyway, so the v0.10.0 release
+  failed later at `jq: command not found` with npm and crates.io unpublished.
+- `publish:npm` now checks that an OIDC token was issued and that npm is new
+  enough, instead of failing with a bare `ENEEDAUTH` that names neither.
+
+### Changed
+
+- Cleared the Python lint backlog (76 findings) and made the gate run: `lint`
+  fired only on merge requests and on a `dev` branch that did not exist, while
+  every commit went straight to `main`. It now also runs on the default branch,
+  and a `dev` branch exists.
+- Blind `except` clauses under `locke/` each carry a `# noqa: BLE001` with a
+  reason; CLI entrypoints are exempted as a layer via `per-file-ignores`, since
+  turning any failure into a clean message is the correct shape there.
+
 ## [0.10.0] - 2026-08-19
 
 ### Security

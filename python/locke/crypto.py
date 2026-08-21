@@ -4,6 +4,7 @@ Handles hex/base64 key encoding auto-detection for backward compatibility.
 """
 
 import base64
+import binascii
 import hashlib
 import json
 import logging
@@ -58,7 +59,8 @@ def decode_key(key_input: str) -> bytes:
         if len(key_bytes) == REQUIRED_KEY_LENGTH:
             logger.debug("Key detected as base64-encoded")
             return key_bytes
-    except Exception:
+    except (binascii.Error, ValueError):
+        # Not base64 -- fall through to the remaining format probes.
         pass
 
     if isinstance(key_input, bytes) and len(key_input) == REQUIRED_KEY_LENGTH:

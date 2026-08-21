@@ -339,6 +339,32 @@ class TestKeystoreUnavailableSuppressesNameBlindBackends:
         assert cred.value == "real-hetzner-token"
         assert cred.source == "env_var"
 
+
+    def test_an_unexpected_keystore_failure_also_suppresses_glab(self, monkeypatch):
+        """Not just biometrics -- a broken backend is equally not evidence of absence.
+
+        Found by justifying the blind excepts one by one: the generic
+        `except Exception` in _try_keystore reported (None, False), i.e. "the
+        keystore answered and does not have it", for a keyring backend crash.
+        Same silent degradation as the biometric case, different exception.
+        """
+        monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "locke.pipeline.keystore_get",
+                    side_effect=RuntimeError("keyring backend exploded"),
+                )
+            )
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(
+                patch("subprocess.run", side_effect=self._glab_answers_everything())
+            )
+            with pytest.raises(CredentialNotFoundError) as excinfo:
+                resolve_credential("GITLAB_TOKEN")
+
+        assert "keystore" in str(excinfo.value).lower()
+
     def test_the_not_found_error_says_the_keystore_was_unreachable(self, monkeypatch):
         """'not found' read as 'never stored'. It must say what actually happened."""
         monkeypatch.delenv("HCLOUD_TOKEN", raising=False)

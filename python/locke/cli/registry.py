@@ -6,7 +6,6 @@ from pathlib import Path
 
 import click
 
-
 DEFAULT_HOST = "gitlab.com"
 NETRC_LOGIN = "__token__"
 

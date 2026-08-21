@@ -38,7 +38,7 @@ class OpenBaoClient:
     timeout: float = 10.0
 
     @classmethod
-    def connect(cls) -> "OpenBaoClient":
+    def connect(cls) -> OpenBaoClient:
         """Create a client from environment variables."""
         addr = _first_env("LOCKE_OPENBAO_ADDR", "OPENBAO_ADDR", "VAULT_ADDR")
         token = _first_env("LOCKE_OPENBAO_TOKEN", "OPENBAO_TOKEN", "VAULT_TOKEN")

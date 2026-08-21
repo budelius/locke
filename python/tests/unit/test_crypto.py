@@ -5,7 +5,7 @@ import warnings
 
 import pytest
 
-from locke.crypto import decrypt_config, encrypt_config, decode_key
+from locke.crypto import decode_key, decrypt_config, encrypt_config
 from locke.errors import DecryptionError, InvalidConfigError, InvalidKeyError
 from tests.conftest import load_test_vectors
 

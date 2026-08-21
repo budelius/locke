@@ -243,7 +243,7 @@ def _get_machine_id() -> str:
         ) as key:
             value, _ = winreg.QueryValueEx(key, "MachineGuid")
             return str(value)
-    except Exception:
+    except Exception:  # noqa: BLE001 -- machine-id probe; any failure means "unidentified host"
         return "unknown"
 
 
@@ -263,7 +263,7 @@ def _compute_session_hmac(verified_at: float, machine_id: str, username: str) ->
     boundary is Windows Hello itself; the session file is a convenience
     cache (same threat model as ``sudo`` timestamp files).
     """
-    msg = f"{verified_at}|{machine_id}|{username}".encode("utf-8")
+    msg = f"{verified_at}|{machine_id}|{username}".encode()
     return hmac.new(machine_id.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
 
@@ -295,7 +295,7 @@ def _write_bio_session() -> None:
                 pass
             raise
         logger.debug("Biometric session written to %s", target)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- session cache is best-effort; never block auth on it
         logger.debug("Failed to write biometric session: %s", exc)
 
 
@@ -339,7 +339,7 @@ def _read_bio_session() -> bool:
 
         logger.debug("Persistent bio session valid (age=%.0fs)", age)
         return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- unreadable cache must re-prompt, not crash
         logger.debug("Failed to read biometric session: %s", exc)
         return False
 
@@ -356,7 +356,7 @@ def invalidate_bio_session() -> bool:
             target.unlink()
             logger.info("Biometric session invalidated")
             return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- invalidation is best-effort cleanup
         logger.debug("Failed to invalidate biometric session: %s", exc)
     return False
 
@@ -368,8 +368,8 @@ def invalidate_bio_session() -> bool:
 def _import_winrt():
     """Lazy-import WinRT types (Windows-only)."""
     from winrt.windows.security.credentials.ui import (
-        UserConsentVerifier,
         UserConsentVerificationResult,
+        UserConsentVerifier,
         UserConsentVerifierAvailability,
     )
     return UserConsentVerifier, UserConsentVerificationResult, UserConsentVerifierAvailability
@@ -388,11 +388,11 @@ def _ensure_sta():
     if _sta_initialized:
         return
     try:
-        from winrt.runtime import init_apartment, STA
+        from winrt.runtime import STA, init_apartment
         init_apartment(STA)
         _sta_initialized = True
-    except Exception:
-        pass  # Best-effort; non-UI calls work without STA
+    except Exception:  # noqa: BLE001, S110 -- COM apartment init; non-UI calls work without STA
+        pass
 
 
 def _run_async(awaitable):
@@ -430,6 +430,7 @@ def _run_async_with_message_pump(operation):
     """
     import ctypes
     import ctypes.wintypes
+
     from winrt.windows.foundation import AsyncStatus
 
     user32 = ctypes.windll.user32
@@ -494,7 +495,7 @@ def check_windows_hello_available() -> bool:
         if not available:
             logger.debug("Windows Hello not available: %s", result)
         return available
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- probe only; unknown failure means "not available"
         logger.debug("Windows Hello availability check failed: %s", exc)
         return False
 
@@ -547,7 +548,7 @@ def verify_windows_hello(
     # Check availability first
     try:
         avail = _run_async(UCV.check_availability_async())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- converted to a typed BiometricUnavailableError below
         raise BiometricUnavailableError(f"availability check failed: {exc}")
 
     if avail != Availability.AVAILABLE:
@@ -556,7 +557,7 @@ def verify_windows_hello(
     # Request verification — shows the Windows Hello dialog
     try:
         result = _run_async(UCV.request_verification_async(message))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- converted to a typed BiometricDeniedError below
         raise BiometricDeniedError(f"verification failed: {exc}")
 
     if result == VerificationResult.VERIFIED:
