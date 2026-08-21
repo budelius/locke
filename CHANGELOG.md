@@ -5,7 +5,31 @@ across the Python, TypeScript, and Rust packages.
 
 ## [Unreleased]
 
+### Added
+
+- Added a Python user-level settings file (`~/.config/locke/config.toml`, or
+  `%APPDATA%/locke/config.toml` on Windows) holding non-secret bootstrap
+  settings, so Vaultwarden connection details resolve from **any** working
+  directory instead of only from a project checkout that has a `.env`.
+- Added `locke config path`, `locke config show`, and `locke config set` to
+  inspect and edit that file.
+- Added `LOCKE_SETTINGS_FILE` to override settings-file discovery with an
+  explicit path.
+
+### Changed
+
+- `LOCKE_VAULT_URL` / `LOCKE_VAULT_USERNAME` now resolve as **environment
+  variable > `./.env` (development and staging only) > the user-level settings
+  file**. The new step is a fallback only, so existing setups are unaffected.
+- The "not set" vault error now names every source that was consulted and the
+  `locke config set` command that fixes it.
+
 ### Security
+
+- The settings file is plaintext and refuses secrets: writing a password key
+  raises, and a password key in an existing file is ignored with a warning. The
+  Vaultwarden master password continues to resolve through the keystore-first
+  credential pipeline.
 
 - An unexpected OS-keystore failure (a broken keyring backend, a missing
   library, a permissions problem) is now treated as "the keystore could not be
