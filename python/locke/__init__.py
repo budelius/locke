@@ -23,7 +23,7 @@ def __getattr__(name: str):
         "set_vault_secret_pair",
         "VaultClient",
     }:
-        import locke.vault as vault
+        from locke import vault
         return getattr(vault, name)
     if name in {
         "OpenBaoClient",
@@ -32,13 +32,16 @@ def __getattr__(name: str):
         "set_openbao_secret",
         "set_openbao_secret_pair",
     }:
-        import locke.openbao as openbao
+        from locke import openbao
         return getattr(openbao, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __version__ = "0.10.0"
 __all__ = [
+    "PLACEHOLDER_VALUE",
+    "PLACEHOLDER_VALUES",
     "CredentialPair",
+    "OpenBaoClient",
     "VaultClient",
     "decrypt_config",
     "decrypt_config_file",
@@ -54,9 +57,6 @@ __all__ = [
     "load_config",
     "load_jsonc",
     "parse_jsonc",
-    "OpenBaoClient",
-    "PLACEHOLDER_VALUE",
-    "PLACEHOLDER_VALUES",
     "read_locke_config",
     "resolve_credential",
     "set_openbao_secret",

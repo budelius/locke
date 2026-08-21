@@ -2,10 +2,8 @@
 
 import fnmatch
 import json
-import os
 import re
 import shutil
-import sys
 from pathlib import Path
 
 import click
@@ -161,7 +159,6 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
     # Report existing encrypted configs
     encrypted_files = sorted(locke_dir.glob("config.encrypted.*.json"))
     if encrypted_files:
-        example_files = [f for f in encrypted_files if "example" in f.name]
         stage_files = [f for f in encrypted_files if "example" not in f.name]
         if stage_files:
             click.echo(f"\n  Found {len(stage_files)} encrypted config(s):", err=True)
@@ -235,12 +232,19 @@ def init(env_file: str, non_interactive: bool, project: str, tenant: str, key_na
     # Move root .env.example into .locke/ if present
     root_env_example = Path(".env.example")
     locke_env_example = locke_dir / ".env.example"
-    if root_env_example.exists() and not locke_env_example.exists():
-        if non_interactive or click.confirm(
-            "  Found .env.example at project root. Move into .locke/?", default=True
-        ):
-            shutil.move(str(root_env_example), str(locke_env_example))
-            click.echo(f"  Moved .env.example → {locke_env_example}", err=True)
+    if (
+        root_env_example.exists()
+        and not locke_env_example.exists()
+        and (
+            non_interactive
+            or click.confirm(
+                "  Found .env.example at project root. Move into .locke/?",
+                default=True,
+            )
+        )
+    ):
+        shutil.move(str(root_env_example), str(locke_env_example))
+        click.echo(f"  Moved .env.example → {locke_env_example}", err=True)
 
     # Migrate .env if it exists
     env_path = Path(env_file)

@@ -15,7 +15,7 @@ import os
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from locke.env import detect_environment, is_production
 from locke.errors import (
@@ -39,7 +39,7 @@ class Credential:
     name: str
     value: str
     source: str  # "keystore", "env_var", "gitlab_cli", "dotenv"
-    resolved_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    resolved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 def _try_keystore(name: str) -> tuple[str | None, bool]:
@@ -66,9 +66,18 @@ def _try_keystore(name: str) -> tuple[str | None, bool]:
             name, exc,
         )
         return None, True
-    except Exception:
-        logger.debug("Keystore lookup failed for '%s'", name)
-        return None, False
+    except Exception as exc:  # noqa: BLE001 -- see below: any failure here means "could not ask"
+        # Deliberately treated as UNAVAILABLE, not as a miss. A broken keyring
+        # backend, a missing DLL or a permissions problem is no more evidence
+        # that the credential is absent than a biometric prompt is -- and the
+        # 2026-08-17 incident is what treating one as the other looks like.
+        logger.warning(
+            "Keystore lookup for '%s' failed unexpectedly (%s) - treating the "
+            "keystore as unavailable rather than as evidence the credential is "
+            "absent.",
+            name, exc,
+        )
+        return None, True
 
 
 #: Set by the keystore backend when it could not be consulted at all (as
@@ -175,6 +184,7 @@ def _resolve_from_glab(name: str) -> str | None:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,  # a non-zero exit just means "no such variable"
             )
             if result.returncode == 0 and result.stdout.strip():
                 logger.warning(
@@ -199,6 +209,7 @@ def _resolve_from_glab(name: str) -> str | None:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,  # a non-zero exit just means "not logged in"
             )
             if result.returncode == 0 and result.stdout.strip():
                 # Loud on purpose. This backend is not name-addressed, so an
@@ -318,9 +329,10 @@ def resolve_credential(name: str) -> Credential:
             name,
             backends_searched,
             detail=(
-                "the OS keystore could not be consulted (biometric gating), so "
-                "the credential may well be stored and simply unreachable. For "
-                "unattended runs set LOCKE_USE_BIOMETRIC=false"
+                "the OS keystore could not be consulted (biometric gating, or a "
+                "keystore backend failure), so the credential may well be stored "
+                "and simply unreachable. For unattended runs set "
+                "LOCKE_USE_BIOMETRIC=false"
             ),
         )
     if not is_production():

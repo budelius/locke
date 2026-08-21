@@ -2,13 +2,12 @@
 
 import json
 import sys
-from pathlib import Path
 
 import click
 
+from locke.cli._key_util import get_key
 from locke.crypto import decrypt_config
 from locke.jsonc import load_jsonc
-from locke.cli._key_util import get_key
 
 
 @click.command()
