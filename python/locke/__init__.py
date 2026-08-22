@@ -34,6 +34,16 @@ def __getattr__(name: str):
     }:
         from locke import openbao
         return getattr(openbao, name)
+    if name in {
+        "OnePasswordClient",
+        "OnePasswordItem",
+        "get_onepassword_secret",
+        "get_onepassword_secret_pair",
+        "set_onepassword_secret",
+        "set_onepassword_secret_pair",
+    }:
+        from locke import onepassword
+        return getattr(onepassword, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __version__ = "0.10.0"
@@ -41,6 +51,8 @@ __all__ = [
     "PLACEHOLDER_VALUE",
     "PLACEHOLDER_VALUES",
     "CredentialPair",
+    "OnePasswordClient",
+    "OnePasswordItem",
     "OpenBaoClient",
     "VaultClient",
     "decrypt_config",
@@ -50,6 +62,8 @@ __all__ = [
     "flatten_config",
     "get_openbao_secret",
     "get_openbao_secret_pair",
+    "get_onepassword_secret",
+    "get_onepassword_secret_pair",
     "get_vault_secret",
     "get_vault_secret_pair",
     "inject_env",
@@ -61,6 +75,8 @@ __all__ = [
     "resolve_credential",
     "set_openbao_secret",
     "set_openbao_secret_pair",
+    "set_onepassword_secret",
+    "set_onepassword_secret_pair",
     "set_vault_secret",
     "set_vault_secret_pair",
     "strip_jsonc",

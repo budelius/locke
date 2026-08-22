@@ -88,6 +88,17 @@ def test_vault_username_is_an_accepted_alias(tmp_path, monkeypatch):
     assert settings.get_setting("LOCKE_VAULT_USERNAME") == "ops@example.com"
 
 
+def test_reads_onepassword_account_and_vault(tmp_path, monkeypatch):
+    monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(tmp_path / "config.toml"))
+    _write(
+        tmp_path / "config.toml",
+        'onepassword_account = "my.1password.com"\n'
+        'onepassword_vault = "Mail"\n',
+    )
+    assert settings.get_setting("LOCKE_ONEPASSWORD_ACCOUNT") == "my.1password.com"
+    assert settings.get_setting("LOCKE_ONEPASSWORD_VAULT") == "Mail"
+
+
 def test_unknown_setting_name_returns_none(tmp_path, monkeypatch):
     monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(tmp_path / "config.toml"))
     _write(tmp_path / "config.toml", 'vault_url = "https://vault.example"\n')
@@ -143,10 +154,14 @@ def test_set_setting_creates_and_updates_the_file(tmp_path, monkeypatch):
 
     settings.set_setting("vault_url", "https://vault.example")
     settings.set_setting("vault_email", "ops@example.com")
+    settings.set_setting("onepassword_account", "my.1password.com")
+    settings.set_setting("onepassword_vault", "Mail")
 
     assert target.is_file()
     assert settings.get_setting("LOCKE_VAULT_URL") == "https://vault.example"
     assert settings.get_setting("LOCKE_VAULT_USERNAME") == "ops@example.com"
+    assert settings.get_setting("LOCKE_ONEPASSWORD_ACCOUNT") == "my.1password.com"
+    assert settings.get_setting("LOCKE_ONEPASSWORD_VAULT") == "Mail"
 
     settings.set_setting("vault_url", "https://other.example")
     assert settings.get_setting("LOCKE_VAULT_URL") == "https://other.example"

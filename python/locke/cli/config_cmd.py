@@ -60,7 +60,8 @@ def config_path_cmd() -> None:
     """Print the path of the user-level settings file.
 
     This is the file Locke reads for non-secret bootstrap settings
-    (vault_url, vault_email) from any working directory. The path is printed
+    (Vaultwarden URL/email and 1Password account/vault) from any working
+    directory. The path is printed
     whether or not the file exists yet.
 
     \b
@@ -112,6 +113,8 @@ def config_set(key: str, value: str) -> None:
     Examples:
         locke config set vault_url https://vault.example.com
         locke config set vault_email ops@example.com
+        locke config set onepassword_account my.1password.com
+        locke config set onepassword_vault Operations
     """
     from locke.settings import set_setting
 

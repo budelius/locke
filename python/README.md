@@ -1,6 +1,7 @@
 # Locke — Python
 
-Unified credentials framework — encrypted config, OS keystore, Vaultwarden and OpenBao integration.
+Unified credentials framework — encrypted config, OS keystore, Vaultwarden,
+1Password, and OpenBao integration.
 
 ## Install
 
@@ -67,6 +68,12 @@ locke vault get myproject/staging/api_key
 locke vault setup
 locke vault setup --interactive
 
+# Store a structured Login through the official op CLI (hidden password prompt)
+locke config set onepassword_account my.1password.com
+locke config set onepassword_vault Operations
+locke onepassword set myproject/staging/db --username admin \
+  --setting host=db.example.com --setting port=5432
+
 # Get/set an OpenBao KV secret
 locke openbao get myproject/staging/api_key
 locke openbao set myproject/staging/api_key --password "new-value"
@@ -99,6 +106,29 @@ Relative paths are resolved from the discovered project root. CLI options take
 precedence over process environment variables, which take precedence over the
 project `.env`. `LOCKE_OUTPUT_DIR` defaults to `.locke`. Use `--project-root`
 to select a root explicitly.
+
+## 1Password
+
+The Python backend stores exact Locke paths as structured Login-item titles.
+Account and vault scope are mandatory, exact-title duplicates fail closed, and
+secret fields are passed to the official `op` CLI over stdin:
+
+```python
+from locke import OnePasswordClient
+
+client = OnePasswordClient.connect()
+client.set_secret_pair(
+    "myproject/prod/mail",
+    "user@example.com",
+    "secret",
+    url="https://mail.example.com",
+    settings={"imap_port": "993", "smtp_port": "465", "tls": "true"},
+)
+```
+
+Set `LOCKE_ONEPASSWORD_ACCOUNT` / `LOCKE_ONEPASSWORD_VAULT`, or persist the
+same non-secret scope with `locke config set onepassword_account ...` and
+`locke config set onepassword_vault ...`.
 
 ## OpenBao KV
 
@@ -140,6 +170,8 @@ real environment variables. The vault password is not read by this fallback:
 | `LOCKE_USE_BIOMETRIC` | Set `false` to disable biometric gating |
 | `LOCKE_VAULT_URL` | Vaultwarden server URL; current-directory `.env` fallback outside production |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username; current-directory `.env` fallback outside production |
+| `LOCKE_ONEPASSWORD_ACCOUNT` | Explicit 1Password account URL/shorthand; falls back to user settings |
+| `LOCKE_ONEPASSWORD_VAULT` | Explicit 1Password vault name/ID; falls back to user settings |
 | `LOCKE_INPUT_DIR` | `genkeys` plaintext config directory, absolute or project-root relative |
 | `LOCKE_OUTPUT_DIR` | `genkeys` output directory (default `.locke`) |
 | `LOCKE_KEY_NAME` | Credential name used by `genkeys` |
