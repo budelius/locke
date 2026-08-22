@@ -9,7 +9,8 @@ across the Python, TypeScript, and Rust packages.
 
 - Added a Python 1Password backend using the official `op` CLI. It provides
   exact-title, idempotent Login-item reads/writes, combined credentials,
-  structured non-secret fields, and `locke onepassword get/set` commands.
+  structured non-secret fields, access/uniqueness preflights, and
+  `locke onepassword get/set` commands.
 - Added `onepassword_account` and `onepassword_vault` user settings (overridden
   by `LOCKE_ONEPASSWORD_ACCOUNT` / `LOCKE_ONEPASSWORD_VAULT`) so every
   1Password operation has explicit account and vault scope.

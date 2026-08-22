@@ -242,6 +242,7 @@ password) is passed on stdin.
 from locke import OnePasswordClient
 
 client = OnePasswordClient.connect()
+client.check_path("myapp/prod/db_login")  # access + exact-title uniqueness preflight
 client.set_secret_pair(
     "myapp/prod/db_login",
     "admin",

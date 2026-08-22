@@ -104,6 +104,16 @@ def test_get_item_returns_pair_url_and_structured_settings(monkeypatch):
     assert "--reveal" in calls[1][0]
 
 
+def test_check_path_preflights_scope_and_exact_title(monkeypatch):
+    path = "obachan/prod/users/user@example.com"
+    calls = _install_op(monkeypatch, [_result([{"id": "item-1", "title": path}])])
+
+    assert OnePasswordClient("account.example", "Mail").check_path(path) is True
+
+    assert len(calls) == 1
+    assert calls[0][0][1:3] == ["item", "list"]
+
+
 def test_get_missing_item_raises_without_get_call(monkeypatch):
     calls = _install_op(monkeypatch, [_result([])])
 

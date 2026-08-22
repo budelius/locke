@@ -136,14 +136,26 @@ class OnePasswordClient:
         except json.JSONDecodeError as exc:
             raise OnePasswordError(operation, "the op CLI returned invalid JSON") from exc
 
-    def _find_item_id(self, path: str) -> str | None:
+    def _list_login_items(self) -> list[dict[str, Any]]:
         rows = self._run_json(
             "list items",
             ["item", "list", "--vault", self.vault, "--categories", "Login"],
         )
-        if not isinstance(rows, list):
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise OnePasswordError("list items", "the op CLI returned an invalid item list")
-        matches = [row for row in rows if isinstance(row, dict) and row.get("title") == path]
+        return rows
+
+    def check(self) -> None:
+        """Prove the configured account/vault is readable without revealing items."""
+        self._list_login_items()
+
+    def check_path(self, path: str) -> bool:
+        """Preflight account/vault access and exact-title uniqueness."""
+        return self._find_item_id(path) is not None
+
+    def _find_item_id(self, path: str) -> str | None:
+        rows = self._list_login_items()
+        matches = [row for row in rows if row.get("title") == path]
         if len(matches) > 1:
             raise OnePasswordError(
                 "find item",
