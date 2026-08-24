@@ -32,12 +32,20 @@ def test_config_set_then_show_round_trips(monkeypatch, tmp_path):
     assert runner.invoke(
         cli, ["config", "set", "vault_email", "ops@example.com"]
     ).exit_code == 0
+    assert runner.invoke(
+        cli, ["config", "set", "onepassword_account", "my.1password.com"]
+    ).exit_code == 0
+    assert runner.invoke(
+        cli, ["config", "set", "onepassword_vault", "Mail"]
+    ).exit_code == 0
 
     result = runner.invoke(cli, ["config", "show"])
 
     assert result.exit_code == 0
     assert "vault_url = https://vault.example" in result.output
     assert "vault_email = ops@example.com" in result.output
+    assert "onepassword_account = my.1password.com" in result.output
+    assert "onepassword_vault = Mail" in result.output
 
 
 def test_config_set_refuses_a_password(monkeypatch, tmp_path):

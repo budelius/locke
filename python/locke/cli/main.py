@@ -226,6 +226,100 @@ def vault_set(
         sys.exit(1)
 
 
+@cli.group(name="onepassword")
+def onepassword() -> None:
+    """Manage structured Login items through the official 1Password CLI."""
+
+
+@onepassword.command("get")
+@click.argument("path")
+@click.option("--account", default=None, help="Override the configured 1Password account")
+@click.option("--vault", "vault_name", default=None, help="Override the configured vault")
+@click.option(
+    "--field",
+    type=click.Choice(["password", "username", "both", "url", "settings"]),
+    default="password",
+    help="Which part of the Login item to print",
+)
+def onepassword_get(
+    path: str,
+    account: str | None,
+    vault_name: str | None,
+    field: str,
+) -> None:
+    """Retrieve an exact-title Login item from 1Password."""
+    try:
+        from locke.onepassword import OnePasswordClient
+
+        item = OnePasswordClient.connect(account=account, vault=vault_name).get_item(path)
+        if field == "password":
+            click.echo(item.password)
+        elif field == "username":
+            click.echo(item.username or "")
+        elif field == "both":
+            click.echo(f"{item.username or ''}:{item.password}")
+        elif field == "url":
+            click.echo(item.url or "")
+        else:
+            click.echo(json.dumps(item.settings, indent=2, sort_keys=True))
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@onepassword.command("set")
+@click.argument("path")
+@click.option("--account", default=None, help="Override the configured 1Password account")
+@click.option("--vault", "vault_name", default=None, help="Override the configured vault")
+@click.option("--username", default=None, help="Username field of the Login item")
+@click.option("--url", default=None, help="Primary URL of the Login item")
+@click.option(
+    "--setting",
+    "setting_values",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Non-secret structured field; repeat as needed",
+)
+def onepassword_set(
+    path: str,
+    account: str | None,
+    vault_name: str | None,
+    username: str | None,
+    url: str | None,
+    setting_values: tuple[str, ...],
+) -> None:
+    """Create or update a 1Password Login item.
+
+    The password is always read from a hidden prompt. Locke intentionally has
+    no password command-line option because process arguments and shell history
+    are not secret-safe transports.
+    """
+    settings: dict[str, str] = {}
+    for assignment in setting_values:
+        key, separator, value = assignment.partition("=")
+        if not separator or not key:
+            raise click.UsageError("--setting must use KEY=VALUE")
+        if key in settings:
+            raise click.UsageError(f"duplicate --setting key: {key}")
+        settings[key] = value
+
+    password = click.prompt("Password", hide_input=True, confirmation_prompt=False)
+    try:
+        from locke.onepassword import OnePasswordClient
+
+        action = OnePasswordClient.connect(account=account, vault=vault_name).set_secret_pair(
+            path,
+            username,
+            password,
+            url=url,
+            settings=settings,
+        )
+        click.echo(f"{action}: {path}", err=True)
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
 @cli.group()
 def openbao() -> None:
     """Manage OpenBao KV secrets."""

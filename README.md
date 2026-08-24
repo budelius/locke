@@ -1,7 +1,8 @@
 # Locke
 
 Unified credentials framework for any project — encrypted config files, OS
-keystore resolution, environment-variable fallback, and Vaultwarden integration.
+keystore resolution, environment-variable fallback, and Vaultwarden, 1Password,
+and OpenBao integration.
 Available in Python, TypeScript, and Rust with cross-language parity.
 
 ## What it gives you
@@ -15,6 +16,9 @@ Available in Python, TypeScript, and Rust with cross-language parity.
   evaluated in priority order.
 - **Vaultwarden/Bitwarden integration** — fetch and import secrets via the
   Bitwarden-compatible REST API.
+- **1Password CLI integration** (Python) — idempotent, structured Login items
+  through the official `op` CLI, with credentials sent over stdin rather than
+  process arguments.
 - **OpenBao KV integration** (Python) — fetch and write secrets from an
   OpenBao KV v1/v2 mount, with the same shape as the Vaultwarden client.
 - **Config flattening** — nested JSON flattens to `SCREAMING_SNAKE_CASE`
@@ -125,6 +129,14 @@ locke vault set myapp/prod/db_login --username admin --password "s3cr3t"
 locke vault get myapp/prod/db_login --field username   # -> admin
 locke vault get myapp/prod/db_login --field both        # -> admin:s3cr3t
 
+# Store a structured Login in an explicit 1Password account and vault.
+# The password is read from a hidden prompt, never a command argument.
+locke config set onepassword_account my.1password.com
+locke config set onepassword_vault Operations
+locke onepassword set myapp/prod/db_login --username admin \
+  --url https://db.example.com --setting host=db.example.com
+locke onepassword get myapp/prod/db_login --field settings
+
 # Encrypt all project configs using project-root .env settings
 locke genkeys
 
@@ -219,6 +231,39 @@ The same `get_secret_pair` / `set_secret_pair` API and `vault get --field` /
 `vault set --username` CLI are available in all three implementations (Python,
 TypeScript, Rust).
 
+## 1Password (Python)
+
+Locke maps an exact path to one Login-item title in an explicitly configured
+1Password account and vault. Exact-title duplicates fail closed. The official
+`op` CLI owns authentication and encryption; create/update JSON (including the
+password) is passed on stdin.
+
+```python
+from locke import OnePasswordClient
+
+client = OnePasswordClient.connect()
+client.check_path("myapp/prod/db_login")  # access + exact-title uniqueness preflight
+client.set_secret_pair(
+    "myapp/prod/db_login",
+    "admin",
+    "s3cr3t",
+    url="https://db.example.com",
+    settings={"host": "db.example.com", "port": "5432", "tls": "true"},
+)
+item = client.get_item("myapp/prod/db_login")
+```
+
+Configure non-secret scope from any directory:
+
+```bash
+locke config set onepassword_account my.1password.com
+locke config set onepassword_vault Operations
+```
+
+Environment variables `LOCKE_ONEPASSWORD_ACCOUNT` and
+`LOCKE_ONEPASSWORD_VAULT` override those settings. Both are required; Locke
+never relies on the `op` CLI's ambient default account or vault.
+
 ## OpenBao KV (Python)
 
 Locke also supports [OpenBao](https://openbao.org/) as a secret backend,
@@ -291,6 +336,8 @@ Your application picks its own credential names (e.g.
 | `LOCKE_VAULT_URL` | Vaultwarden server URL (Python: `.env` fallback outside production, then `vault_url` in the user-level settings file) |
 | `LOCKE_VAULT_USERNAME` | Vaultwarden username (Python: `.env` fallback outside production, then `vault_email` in the user-level settings file) |
 | `LOCKE_VAULT_PASSWORD` | Vaultwarden password (prefer OS keystore) |
+| `LOCKE_ONEPASSWORD_ACCOUNT` | Explicit 1Password account URL/shorthand (Python; falls back to user settings) |
+| `LOCKE_ONEPASSWORD_VAULT` | Explicit 1Password vault name/ID (Python; falls back to user settings) |
 | `LOCKE_INPUT_DIR` | `locke genkeys` plaintext config directory (relative to project root if needed) |
 | `LOCKE_OUTPUT_DIR` | `locke genkeys` output directory (default `.locke`) |
 | `LOCKE_KEY_NAME` | Credential name used by `locke genkeys` |
