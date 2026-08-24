@@ -1,7 +1,8 @@
 """Global (per-user) Locke settings.
 
-Locke's Vaultwarden connection details (`LOCKE_VAULT_URL`,
-`LOCKE_VAULT_USERNAME`) used to be reachable only through the process
+Locke's backend connection details (including `LOCKE_VAULT_URL`,
+`LOCKE_VAULT_USERNAME`, `LOCKE_ONEPASSWORD_ACCOUNT`, and
+`LOCKE_ONEPASSWORD_VAULT`) used to be reachable only through the process
 environment or a `.env` file **in the current working directory**. That works
 inside a project checkout and nowhere else: run the same command from a git
 worktree, a scheduled task, or any other directory and the vault call fails
@@ -13,6 +14,8 @@ plays for git — so those settings resolve from any directory:
     # ~/.config/locke/config.toml  (%APPDATA%\\locke\\config.toml on Windows)
     vault_url = "https://vault.example.com"
     vault_email = "ops@example.com"
+    onepassword_account = "my.1password.com"
+    onepassword_vault = "Operations"
 
 Resolution precedence for a connection setting is **environment variable >
 `./.env` > this file**, so nothing that worked before changes behaviour.
@@ -44,10 +47,18 @@ SETTINGS_DIRNAME = "locke"
 _SETTING_KEYS: dict[str, tuple[str, ...]] = {
     "LOCKE_VAULT_URL": ("vault_url",),
     "LOCKE_VAULT_USERNAME": ("vault_email", "vault_username"),
+    "LOCKE_ONEPASSWORD_ACCOUNT": ("onepassword_account",),
+    "LOCKE_ONEPASSWORD_VAULT": ("onepassword_vault",),
 }
 
 #: Every key the file may define, in the order `set_setting` writes them.
-KNOWN_KEYS: tuple[str, ...] = ("vault_url", "vault_email", "vault_username")
+KNOWN_KEYS: tuple[str, ...] = (
+    "vault_url",
+    "vault_email",
+    "vault_username",
+    "onepassword_account",
+    "onepassword_vault",
+)
 
 #: Keys that would put a secret in a plaintext file. Refused on write,
 #: ignored on read.

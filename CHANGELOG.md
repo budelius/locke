@@ -7,6 +7,13 @@ across the Python, TypeScript, and Rust packages.
 
 ### Added
 
+- Added a Python 1Password backend using the official `op` CLI. It provides
+  exact-title, idempotent Login-item reads/writes, combined credentials,
+  structured non-secret fields, access/uniqueness preflights, and
+  `locke onepassword get/set` commands.
+- Added `onepassword_account` and `onepassword_vault` user settings (overridden
+  by `LOCKE_ONEPASSWORD_ACCOUNT` / `LOCKE_ONEPASSWORD_VAULT`) so every
+  1Password operation has explicit account and vault scope.
 - Added a Python user-level settings file (`~/.config/locke/config.toml`, or
   `%APPDATA%/locke/config.toml` on Windows) holding non-secret bootstrap
   settings, so Vaultwarden connection details resolve from **any** working
@@ -26,6 +33,9 @@ across the Python, TypeScript, and Rust packages.
 
 ### Security
 
+- 1Password create/edit payloads are sent to `op` over stdin; Locke exposes no
+  password command-line flag and does not include `op` stderr in exceptions,
+  because either could disclose a submitted secret.
 - The settings file is plaintext and refuses secrets: writing a password key
   raises, and a password key in an existing file is ignored with a warning. The
   Vaultwarden master password continues to resolve through the keystore-first

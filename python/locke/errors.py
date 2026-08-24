@@ -81,6 +81,22 @@ class VaultAuthError(LockeError):
         super().__init__(msg)
 
 
+class OnePasswordError(LockeError):
+    """The official 1Password CLI could not complete an operation.
+
+    Error messages intentionally omit ``op`` stderr because it may quote a
+    submitted secret field.
+    """
+
+    def __init__(self, operation: str, detail: str = "") -> None:
+        self.operation = operation
+        self.detail = detail
+        message = f"1Password operation failed: {operation}"
+        if detail:
+            message += f" ({detail})"
+        super().__init__(message)
+
+
 class SecretNotFoundError(LockeError):
     """Vault secret path doesn't exist."""
 
