@@ -279,7 +279,7 @@ class OnePasswordClient:
             "category": "LOGIN",
             "sections": [{"id": _SETTINGS_SECTION_ID, "label": _SETTINGS_SECTION_LABEL}],
             "fields": fields,
-            "tags": sorted(set([_MANAGED_TAG, *(tags or [])])),
+            "tags": sorted({_MANAGED_TAG, *(tags or [])}),
         }
         if url:
             payload["urls"] = [{"label": "website", "primary": True, "href": url}]
