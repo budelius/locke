@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _metadata_version
 from pathlib import Path
 
 from locke.crypto import decrypt_config, encrypt_config
@@ -46,7 +48,14 @@ def __getattr__(name: str):
         return getattr(onepassword, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.10.0"
+# Read from the installed package metadata rather than restated here: the
+# literal silently disagreed with pyproject.toml (0.10.0 vs 0.11.0), so
+# `locke.__version__` reported a build the caller was not running and any
+# version check made from it was wrong.
+try:  # pragma: no cover - trivial, and the fallback needs a broken install
+    __version__ = _metadata_version("locke")
+except _PackageNotFoundError:  # pragma: no cover - source tree without install
+    __version__ = "0.0.0+unknown"
 __all__ = [
     "PLACEHOLDER_VALUE",
     "PLACEHOLDER_VALUES",
