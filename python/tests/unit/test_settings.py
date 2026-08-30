@@ -245,3 +245,17 @@ def test_set_setting_still_drops_a_secret_someone_hand_wrote(tmp_path, monkeypat
     body = target.read_text(encoding="utf-8")
     assert "hunter2" not in body
     assert "keep-me" in body
+
+
+def test_reported_version_matches_the_installed_package():
+    """`locke.__version__` must not be a literal that drifts from the package.
+
+    It was restated in `__init__.py` and fell behind pyproject.toml, so
+    `locke.__version__` named a build the caller was not running -- and any
+    upgrade check made from it silently compared the wrong thing.
+    """
+    from importlib.metadata import version
+
+    import locke
+
+    assert locke.__version__ == version("locke")
