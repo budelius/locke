@@ -45,7 +45,10 @@ lint:
   stage: lint
   image: python:3.13-slim
   script:
-    - pip install ruff
+    # Pinned: an unpinned install let CI drift ahead of every developer's local
+    # ruff, so a change that linted clean locally failed here on rules the older
+    # version did not have. Bump deliberately, with the findings in the same MR.
+    - pip install "ruff==0.16.5"
     - cd python
     - ruff check .
   # No rules: the workflow above already restricts this to protected refs and

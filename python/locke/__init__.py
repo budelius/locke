@@ -1,11 +1,10 @@
 """Locke — Unified credentials framework."""
 
 import json
-from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
-from importlib.metadata import version as _metadata_version
-
 import logging
 import os
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _metadata_version
 from pathlib import Path
 
 from locke.crypto import decrypt_config, encrypt_config
