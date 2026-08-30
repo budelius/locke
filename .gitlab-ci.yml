@@ -149,12 +149,27 @@ publish:crates:
     CRATES_IO_ID_TOKEN:
       aud: crates.io
   before_script:
-    # This runner cannot let apt drop privileges to the _apt user -- its http
-    # method dies with "setegid/seteuid/setgroups: Operation not permitted".
-    # apt still exits 0, so the v0.10.0 release only discovered the missing
-    # packages later, as `jq: command not found` mid token-exchange.
-    - apt-get -o APT::Sandbox::User=root update
-    - apt-get -o APT::Sandbox::User=root install -y --no-install-recommends curl jq pkg-config libssl-dev libdbus-1-dev
+    # Two separate constraints from the hardened OSS runner, both about
+    # privileges apt normally assumes it has.
+    #
+    # `APT::Sandbox::User=root` stops apt dropping to the _apt user: the runner
+    # forbids privilege escalation, so its http method dies with
+    # "setegid/seteuid/setgroups: Operation not permitted". apt still exits 0,
+    # which is how the v0.10.0 release only noticed later as
+    # `jq: command not found` mid token-exchange.
+    #
+    # The cache directories then have to move somewhere root can actually
+    # write. The runner drops ALL capabilities, so root has no CAP_DAC_OVERRIDE
+    # and cannot write Debian's _apt-owned, mode-700
+    # /var/cache/apt/archives/partial -- every download fails with
+    # "Could not open file ... Permission denied" even as root.
+    - mkdir -p /tmp/apt/archives/partial /tmp/apt/lists/partial
+    - |
+      APT_OPTS="-o APT::Sandbox::User=root
+                -o Dir::Cache::archives=/tmp/apt/archives
+                -o Dir::State::lists=/tmp/apt/lists"
+      apt-get $APT_OPTS update
+      apt-get $APT_OPTS install -y --no-install-recommends curl jq pkg-config libssl-dev libdbus-1-dev
     # Assert the side effect, not the exit code.
     - for t in curl jq pkg-config; do command -v "$t" >/dev/null || { echo "$t missing after apt install" >&2; exit 1; }; done
   script:
