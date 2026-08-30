@@ -242,6 +242,15 @@ def set_setting(key: str, value: str) -> Path:
         for name in KNOWN_KEYS
         if name in current
     )
+    # Rewrite every non-secret setting the file already held, not only the ones
+    # this build knows. Otherwise an older Locke writing a file a newer one
+    # created silently deletes the newer keys, and the operator finds out when
+    # some unrelated command loses its configuration.
+    unknown = sorted(set(current) - set(KNOWN_KEYS))
+    if unknown:
+        lines.append("")
+        lines.append("# Preserved as written; not settings this Locke build knows.")
+        lines.extend(f"{name} = {_toml_string(current[name])}" for name in unknown)
     body = "\n".join(lines) + "\n"
 
     path.parent.mkdir(parents=True, exist_ok=True)
