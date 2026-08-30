@@ -31,6 +31,7 @@ def _write(path: Path, body: str) -> None:
 # Path discovery
 # ---------------------------------------------------------------------------
 
+
 def test_explicit_file_var_wins(tmp_path, monkeypatch):
     explicit = tmp_path / "elsewhere" / "locke.toml"
     monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(explicit))
@@ -67,6 +68,7 @@ def test_home_dotconfig_is_searched(tmp_path, monkeypatch):
 # Loading
 # ---------------------------------------------------------------------------
 
+
 def test_missing_file_yields_empty_settings(tmp_path):
     assert settings.load_settings() == {}
     assert settings.get_setting("LOCKE_VAULT_URL") is None
@@ -92,8 +94,7 @@ def test_reads_onepassword_account_and_vault(tmp_path, monkeypatch):
     monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(tmp_path / "config.toml"))
     _write(
         tmp_path / "config.toml",
-        'onepassword_account = "my.1password.com"\n'
-        'onepassword_vault = "Mail"\n',
+        'onepassword_account = "my.1password.com"\nonepassword_vault = "Mail"\n',
     )
     assert settings.get_setting("LOCKE_ONEPASSWORD_ACCOUNT") == "my.1password.com"
     assert settings.get_setting("LOCKE_ONEPASSWORD_VAULT") == "Mail"
@@ -146,6 +147,7 @@ def test_cache_is_invalidated_when_the_file_changes(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Writing
 # ---------------------------------------------------------------------------
+
 
 def test_set_setting_creates_and_updates_the_file(tmp_path, monkeypatch):
     target = tmp_path / "nested" / "config.toml"
@@ -207,3 +209,39 @@ def test_written_file_is_user_only(tmp_path, monkeypatch):
     settings.clear_cache()
     settings.set_setting("vault_url", "https://vault.example")
     assert target.stat().st_mode & 0o077 == 0
+
+
+def test_set_setting_preserves_keys_this_build_does_not_know(tmp_path, monkeypatch):
+    """A rewrite must not delete settings a newer Locke wrote.
+
+    `set_setting` renders the file from scratch. Emitting only KNOWN_KEYS meant
+    an older build silently dropped every key a newer one had added, and the
+    loss surfaced later as an unrelated command losing its configuration.
+    """
+    target = tmp_path / "config.toml"
+    monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(target))
+    _write(target, 'from_a_newer_locke = "keep-me"\n')
+
+    settings.set_setting("vault_url", "https://vault.example")
+
+    settings.clear_cache()
+    loaded = settings.load_settings()
+    assert loaded["from_a_newer_locke"] == "keep-me"
+    assert loaded["vault_url"] == "https://vault.example"
+
+
+def test_set_setting_still_drops_a_secret_someone_hand_wrote(tmp_path, monkeypatch):
+    """Preserving unknown keys must not preserve secrets.
+
+    The file is plaintext, so a password found in it is dropped on rewrite
+    rather than faithfully copied forward.
+    """
+    target = tmp_path / "config.toml"
+    monkeypatch.setenv(settings.SETTINGS_FILE_VAR, str(target))
+    _write(target, 'vault_password = "hunter2"\nfrom_a_newer_locke = "keep-me"\n')
+
+    settings.set_setting("vault_url", "https://vault.example")
+
+    body = target.read_text(encoding="utf-8")
+    assert "hunter2" not in body
+    assert "keep-me" in body
