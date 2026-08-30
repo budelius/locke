@@ -14,6 +14,26 @@ default:
   tags:
     - obachan-staging-oss
 
+# Branch pipelines only, and only on protected refs.
+#
+# The runner above is `ref_protected`, and GitLab never marks a detached
+# merge-request ref (`refs/merge-requests/N/head`) as protected -- so a merge
+# request pipeline can never acquire this runner and queues forever. Verified
+# on !11: the job sat pending with no runner even after protecting the source
+# branch pattern.
+#
+# Running on the branch instead gives the same pre-merge signal on a ref the
+# runner will accept. Maintainer branch prefixes are protected for exactly this
+# reason; an outside contributor's branch stays unprotected, gets no pipeline,
+# and therefore never executes on our cluster.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+    - when: never
+
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
@@ -28,14 +48,11 @@ lint:
     - pip install ruff
     - cd python
     - ruff check .
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
-    - if: $CI_COMMIT_BRANCH == "dev"
-    # ...and on the default branch. Until now lint ran only on merge requests
-    # and on a "dev" branch that did not exist, while every commit went
-    # straight to main -- so the gate never ran and 76 findings accumulated
-    # behind it.
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  # No rules: the workflow above already restricts this to protected refs and
+  # tags, which is every ref lint should gate. An earlier per-job rule list ran
+  # lint only on merge requests and on a "dev" branch that did not exist, while
+  # every commit went straight to main -- so the gate never ran at all and 76
+  # findings accumulated behind it.
 
 publish:python:
   stage: publish
