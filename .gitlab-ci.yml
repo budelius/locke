@@ -2,6 +2,18 @@ stages:
   - lint
   - publish
 
+# Every job runs on Obachan's own runner. GitLab's shared runners are out of
+# quota on this project, so an untagged job does not queue -- it fails outright
+# with `ci_quota_exceeded` before it starts. Setting this as a default rather
+# than per-job means a future job cannot silently inherit that failure.
+#
+# `obachan-staging-oss` is the isolated runner for public projects: tagged-only
+# and ref_protected, so an outside contributor's branch cannot execute on our
+# cluster. The consequence is that jobs only run on protected refs.
+default:
+  tags:
+    - obachan-staging-oss
+
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
@@ -28,8 +40,6 @@ lint:
 publish:python:
   stage: publish
   image: python:3.13-slim
-  tags:
-    - obachan-staging-oss
   script:
     - pip install hatch twine
     - cd python
@@ -73,8 +83,6 @@ publish:python:
 publish:npm:
   stage: publish
   image: node:22
-  tags:
-    - obachan-staging-oss
   environment: release
   id_tokens:
     NPM_ID_TOKEN:
@@ -116,8 +124,6 @@ publish:npm:
 publish:crates:
   stage: publish
   image: rust:1-bookworm
-  tags:
-    - obachan-staging-oss
   environment: release
   id_tokens:
     CRATES_IO_ID_TOKEN:
