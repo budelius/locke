@@ -82,3 +82,40 @@ def test_onepassword_get_settings_prints_only_non_secret_metadata():
     assert result.exit_code == 0, result.output
     assert "mail.example.com" in result.output
     assert "secret-value" not in result.output
+
+
+def test_onepassword_authorize_reports_scope_without_printing_token():
+    client = Mock(
+        account="my.1password.com",
+        vault="pseekoo",
+    )
+
+    with patch("locke.onepassword.OnePasswordClient.connect", return_value=client):
+        result = CliRunner().invoke(cli, ["onepassword", "authorize"])
+
+    assert result.exit_code == 0, result.output
+    assert "my.1password.com" in result.output
+    assert "pseekoo" in result.output
+    assert "session cached in the OS keystore" in result.output
+    client.authorize.assert_called_once_with()
+
+
+def test_onepassword_forget_session_uses_explicit_account_scope():
+    client = Mock(account="other.1password.com", vault="Mail")
+
+    with patch("locke.onepassword.OnePasswordClient.connect", return_value=client) as connect:
+        result = CliRunner().invoke(
+            cli,
+            [
+                "onepassword",
+                "forget-session",
+                "--account",
+                "other.1password.com",
+                "--vault",
+                "Mail",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    connect.assert_called_once_with(account="other.1password.com", vault="Mail")
+    client.forget_session.assert_called_once_with()

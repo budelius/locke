@@ -133,6 +133,8 @@ locke vault get myapp/prod/db_login --field both        # -> admin:s3cr3t
 # The password is read from a hidden prompt, never a command argument.
 locke config set onepassword_account my.1password.com
 locke config set onepassword_vault Operations
+# Run in a human terminal when child/agent processes also need access.
+locke onepassword authorize
 locke onepassword set myapp/prod/db_login --username admin \
   --url https://db.example.com --setting host=db.example.com
 locke onepassword get myapp/prod/db_login --field settings
@@ -263,6 +265,30 @@ locke config set onepassword_vault Operations
 Environment variables `LOCKE_ONEPASSWORD_ACCOUNT` and
 `LOCKE_ONEPASSWORD_VAULT` override those settings. Both are required; Locke
 never relies on the `op` CLI's ambient default account or vault.
+
+The 1Password desktop app scopes its CLI authorization to the calling terminal.
+If Obachan, a coding agent, or another non-interactive child cannot share that
+session, authorize Locke from an unlocked human terminal:
+
+```bash
+locke onepassword authorize
+```
+
+Locke runs `op signin --raw`, verifies read access to the configured vault, and
+stores the resulting **short-lived** session under an account-scoped key in the
+OS keystore. The token is never printed, placed on argv, or written to the
+plaintext settings file. Non-interactive 1Password calls inject it only into
+the child `op` process environment. 1Password sessions expire after 30 minutes
+of inactivity; rerun `authorize` when Locke reports expiry. Remove the cached
+session explicitly with:
+
+```bash
+locke onepassword forget-session
+```
+
+Existing `OP_SESSION*`, Connect, or service-account environment authentication
+takes precedence. Normal interactive use continues to rely on the desktop-app
+integration without consulting the cached bridge.
 
 ## OpenBao KV (Python)
 

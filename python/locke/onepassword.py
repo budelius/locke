@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
@@ -33,6 +34,42 @@ _SETTINGS_SECTION_ID = "locke_settings"
 _SETTINGS_SECTION_LABEL = "Connection settings"
 _MANAGED_TAG = "locke-managed"
 _FIELD_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_. -]{0,63}$")
+_SESSION_CREDENTIAL_PREFIX = "LOCKE_ONEPASSWORD_SESSION_"
+_OP_FIXED_AUTH_VARS = frozenset(
+    {
+        "OP_CONNECT_HOST",
+        "OP_CONNECT_TOKEN",
+        "OP_SERVICE_ACCOUNT_TOKEN",
+        "OP_SESSION",
+    }
+)
+
+
+def _session_credential_name(account: str) -> str:
+    """Return a stable, account-scoped OS-keystore credential name."""
+    digest = sha256(account.strip().casefold().encode("utf-8")).hexdigest()[:24]
+    return f"{_SESSION_CREDENTIAL_PREFIX}{digest.upper()}"
+
+
+def _has_ambient_auth(environment: dict[str, str]) -> bool:
+    """Return whether ``op`` already has explicit non-terminal authentication."""
+    if environment.get("OP_SERVICE_ACCOUNT_TOKEN") or environment.get("OP_SESSION"):
+        return True
+    if environment.get("OP_CONNECT_HOST") and environment.get("OP_CONNECT_TOKEN"):
+        return True
+    return any(
+        name.startswith("OP_SESSION_") and bool(value)
+        for name, value in environment.items()
+    )
+
+
+def _without_op_auth(environment: dict[str, str]) -> dict[str, str]:
+    """Copy an environment without bearer credentials used by ``op``."""
+    clean = dict(environment)
+    for name in list(clean):
+        if name in _OP_FIXED_AUTH_VARS or name.startswith("OP_SESSION_"):
+            clean.pop(name, None)
+    return clean
 
 
 @dataclass(frozen=True)
@@ -96,12 +133,63 @@ class OnePasswordClient:
             )
         return cls(str(resolved_account), str(resolved_vault))
 
+    @property
+    def _session_credential(self) -> str:
+        return _session_credential_name(self.account)
+
+    def _stored_session_token(self) -> str | None:
+        """Read this account's short-lived session from Locke's OS keystore."""
+        from locke.errors import LockeError
+        from locke.keystore import get_credential
+
+        try:
+            return get_credential(self._session_credential)
+        except LockeError as exc:
+            raise OnePasswordError(
+                "authentication",
+                "Locke could not read the cached 1Password session from the OS keystore",
+            ) from exc
+        except Exception as exc:
+            # Omit backend text because it may contain secret data.
+            raise OnePasswordError(
+                "authentication",
+                "unexpected failure while reading the cached 1Password session",
+            ) from exc
+
+    def _op_environment(
+        self,
+        *,
+        session_token: str | None = None,
+    ) -> tuple[dict[str, str], str]:
+        """Build an isolated ``op`` environment and describe its auth source."""
+        if session_token is not None:
+            environment = _without_op_auth(os.environ)
+            environment["OP_SESSION"] = session_token
+            return environment, "explicit"
+
+        environment = dict(os.environ)
+        if _has_ambient_auth(environment):
+            return environment, "ambient"
+
+        # Interactive callers should keep using 1Password's desktop-app
+        # integration. The keystore bridge exists specifically for child and
+        # agent processes that cannot share that terminal-scoped authorization.
+        if sys.stdin.isatty():
+            return environment, "terminal"
+
+        cached = self._stored_session_token()
+        if cached:
+            environment["OP_SESSION"] = cached
+            return environment, "keystore"
+        return environment, "none"
+
     def _run_json(
         self,
         operation: str,
         args: list[str],
         *,
         stdin_payload: dict[str, Any] | None = None,
+        session_token: str | None = None,
     ) -> Any:
         """Run ``op`` and decode JSON without reflecting stderr or stdin."""
         executable = shutil.which("op")
@@ -112,6 +200,7 @@ class OnePasswordClient:
         stdin = None
         if stdin_payload is not None:
             stdin = json.dumps(stdin_payload, separators=(",", ":")) + "\n"
+        environment, auth_source = self._op_environment(session_token=session_token)
         try:
             result = subprocess.run(
                 command,
@@ -121,6 +210,7 @@ class OnePasswordClient:
                 encoding="utf-8",
                 timeout=120,
                 check=False,
+                env=environment,
             )
         except subprocess.TimeoutExpired as exc:
             raise OnePasswordError(operation, "the op CLI timed out after 120 seconds") from exc
@@ -130,16 +220,33 @@ class OnePasswordClient:
         if result.returncode != 0:
             # `op` diagnostics can quote submitted field values. Do not include
             # stderr in an exception that an application may log.
-            raise OnePasswordError(operation, f"the op CLI exited with status {result.returncode}")
+            if auth_source == "keystore":
+                detail = (
+                    "the cached session was refused or has expired; run "
+                    "'locke onepassword authorize' in an interactive terminal"
+                )
+            elif auth_source == "none":
+                detail = (
+                    "no reusable session is available; run "
+                    "'locke onepassword authorize' in an interactive terminal"
+                )
+            else:
+                detail = f"the op CLI exited with status {result.returncode}"
+            raise OnePasswordError(operation, detail)
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError as exc:
             raise OnePasswordError(operation, "the op CLI returned invalid JSON") from exc
 
-    def _list_login_items(self) -> list[dict[str, Any]]:
+    def _list_login_items(
+        self,
+        *,
+        session_token: str | None = None,
+    ) -> list[dict[str, Any]]:
         rows = self._run_json(
             "list items",
             ["item", "list", "--vault", self.vault, "--categories", "Login"],
+            session_token=session_token,
         )
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise OnePasswordError("list items", "the op CLI returned an invalid item list")
@@ -152,6 +259,91 @@ class OnePasswordClient:
     def check_path(self, path: str) -> bool:
         """Preflight account/vault access and exact-title uniqueness."""
         return self._find_item_id(path) is not None
+
+    def authorize(self) -> None:
+        """Cache an interactive ``op signin`` session after verifying the vault.
+
+        The short-lived token is captured in memory, verified against the
+        configured account/vault, and stored only in Locke's OS keystore. It is
+        never printed, passed on argv, or written to plaintext settings.
+        """
+        if not sys.stdin.isatty():
+            raise OnePasswordError(
+                "authorize",
+                "this command must run directly in an interactive terminal",
+            )
+
+        executable = shutil.which("op")
+        if not executable:
+            raise OnePasswordError("authorize", "the official 'op' CLI is not installed")
+
+        command = [executable, "signin", "--account", self.account, "--raw"]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=120,
+                check=False,
+                env=_without_op_auth(os.environ),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise OnePasswordError(
+                "authorize",
+                "interactive sign-in timed out after 120 seconds",
+            ) from exc
+        except OSError as exc:
+            raise OnePasswordError("authorize", "the op CLI could not be started") from exc
+
+        if result.returncode != 0:
+            raise OnePasswordError(
+                "authorize",
+                "interactive sign-in failed; run this command directly in an unlocked terminal",
+            )
+        token = result.stdout.strip()
+        if not token or any(character.isspace() for character in token):
+            raise OnePasswordError("authorize", "the op CLI returned an invalid session token")
+
+        # Verify both account authentication and exact configured-vault access
+        # before persisting the bearer token.
+        self._list_login_items(session_token=token)
+
+        from locke.errors import LockeError
+        from locke.keystore import set_credential
+
+        try:
+            set_credential(self._session_credential, token)
+        except LockeError as exc:
+            raise OnePasswordError(
+                "authorize",
+                "Locke could not store the session in the OS keystore",
+            ) from exc
+        except Exception as exc:
+            # Omit backend text because it may contain secret data.
+            raise OnePasswordError(
+                "authorize",
+                "unexpected failure while storing the session",
+            ) from exc
+
+    def forget_session(self) -> None:
+        """Delete this account's cached session from Locke's OS keystore."""
+        from locke.errors import LockeError
+        from locke.keystore import delete_credential
+
+        try:
+            delete_credential(self._session_credential)
+        except LockeError as exc:
+            raise OnePasswordError(
+                "forget session",
+                "Locke could not delete the cached session from the OS keystore",
+            ) from exc
+        except Exception as exc:
+            # Keep backend diagnostics redaction-safe.
+            raise OnePasswordError(
+                "forget session",
+                "unexpected failure while deleting the cached session",
+            ) from exc
 
     def _find_item_id(self, path: str) -> str | None:
         rows = self._list_login_items()

@@ -7,6 +7,10 @@ across the Python, TypeScript, and Rust packages.
 
 ### Added
 
+- Added `locke onepassword authorize` and `forget-session` to bridge an
+  interactive, short-lived 1Password CLI session to non-interactive
+  Locke/Obachan child processes through an account-scoped OS-keystore entry.
+  Authorization verifies the explicitly configured vault before caching.
 - Added a Python 1Password backend using the official `op` CLI. It provides
   exact-title, idempotent Login-item reads/writes, combined credentials,
   structured non-secret fields, access/uniqueness preflights, and
@@ -33,6 +37,10 @@ across the Python, TypeScript, and Rust packages.
 
 ### Security
 
+- Cached 1Password sessions never appear on stdout, argv, or in Locke's
+  plaintext settings. Locke passes them only through an isolated child `op`
+  environment, preserves explicit environment authentication precedence, and
+  fails closed with a reauthorization command after session refusal/expiry.
 - 1Password create/edit payloads are sent to `op` over stdin; Locke exposes no
   password command-line flag and does not include `op` stderr in exceptions,
   because either could disclose a submitted secret.

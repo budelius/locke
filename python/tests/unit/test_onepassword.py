@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -11,7 +12,13 @@ import pytest
 
 import locke
 from locke.errors import OnePasswordError, SecretNotFoundError
-from locke.onepassword import OnePasswordClient
+from locke.onepassword import OnePasswordClient, _session_credential_name
+
+
+@pytest.fixture(autouse=True)
+def _disable_real_session_keystore(monkeypatch):
+    """Unit tests must never consult the operator's real OS keystore."""
+    monkeypatch.setattr(OnePasswordClient, "_stored_session_token", lambda self: None)
 
 
 def _result(payload, *, returncode=0, stderr=""):
@@ -214,3 +221,165 @@ def test_setting_names_are_validated_before_op_write(monkeypatch):
             settings={"bad/name": "value"},
             tags=None,
         )
+
+
+def _clear_op_auth(monkeypatch):
+    for name in list(os.environ):
+        if name in {
+            "OP_CONNECT_HOST",
+            "OP_CONNECT_TOKEN",
+            "OP_SERVICE_ACCOUNT_TOKEN",
+            "OP_SESSION",
+        } or name.startswith("OP_SESSION_"):
+            monkeypatch.delenv(name, raising=False)
+
+
+def test_noninteractive_operation_injects_account_scoped_keystore_session(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: False),
+    )
+    monkeypatch.setattr(
+        OnePasswordClient,
+        "_stored_session_token",
+        lambda self: "cached-session-secret",
+    )
+    calls = _install_op(monkeypatch, [_result([])])
+
+    OnePasswordClient("account.example", "Mail").check()
+
+    command, kwargs = calls[0]
+    assert "cached-session-secret" not in command
+    assert kwargs["env"]["OP_SESSION"] == "cached-session-secret"
+    assert "OP_SESSION" not in os.environ
+
+
+def test_ambient_auth_takes_precedence_over_cached_session(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setenv("OP_SESSION", "ambient-session")
+    monkeypatch.setattr(
+        OnePasswordClient,
+        "_stored_session_token",
+        lambda self: pytest.fail("keystore must not be read when ambient auth exists"),
+    )
+    calls = _install_op(monkeypatch, [_result([])])
+
+    OnePasswordClient("account.example", "Mail").check()
+
+    assert calls[0][1]["env"]["OP_SESSION"] == "ambient-session"
+
+
+def test_session_keystore_keys_are_account_scoped():
+    first = _session_credential_name("one.1password.com")
+    second = _session_credential_name("two.1password.com")
+
+    assert first.startswith("LOCKE_ONEPASSWORD_SESSION_")
+    assert first != second
+    assert first == _session_credential_name("ONE.1PASSWORD.COM")
+
+
+def test_authorize_verifies_vault_then_stores_session_without_argv_disclosure(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: True),
+    )
+    calls = _install_op(
+        monkeypatch,
+        [
+            _result("short-lived-session-secret\n"),
+            _result([]),
+        ],
+    )
+    stored = []
+    monkeypatch.setattr(
+        "locke.keystore.set_credential",
+        lambda name, value: stored.append((name, value)),
+    )
+    client = OnePasswordClient("account.example", "Mail")
+
+    client.authorize()
+
+    signin_command, signin_kwargs = calls[0]
+    assert signin_command[1:] == ["signin", "--account", "account.example", "--raw"]
+    assert "short-lived-session-secret" not in signin_command
+    assert "OP_SESSION" not in signin_kwargs["env"]
+
+    verify_command, verify_kwargs = calls[1]
+    assert verify_command[1:3] == ["item", "list"]
+    assert "short-lived-session-secret" not in verify_command
+    assert verify_kwargs["env"]["OP_SESSION"] == "short-lived-session-secret"
+    assert stored == [(client._session_credential, "short-lived-session-secret")]
+
+
+def test_authorize_does_not_store_session_when_vault_preflight_fails(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: True),
+    )
+    secret = "short-lived-session-secret"
+    _install_op(
+        monkeypatch,
+        [
+            _result(f"{secret}\n"),
+            _result("", returncode=1, stderr=f"denied {secret}"),
+        ],
+    )
+    store = Mock(side_effect=AssertionError("failed preflight must not persist a token"))
+    monkeypatch.setattr("locke.keystore.set_credential", store)
+
+    with pytest.raises(OnePasswordError) as caught:
+        OnePasswordClient("account.example", "Mail").authorize()
+
+    assert secret not in str(caught.value)
+    store.assert_not_called()
+
+
+def test_authorize_refuses_noninteractive_invocation_before_starting_op(monkeypatch):
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: False),
+    )
+    run = Mock(side_effect=AssertionError("op must not start outside a human terminal"))
+    monkeypatch.setattr("locke.onepassword.subprocess.run", run)
+
+    with pytest.raises(OnePasswordError, match="interactive terminal"):
+        OnePasswordClient("account.example", "Mail").authorize()
+
+    run.assert_not_called()
+
+
+def test_cached_session_failure_names_safe_reauthorization_command(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: False),
+    )
+    monkeypatch.setattr(
+        OnePasswordClient,
+        "_stored_session_token",
+        lambda self: "expired-session-secret",
+    )
+    _install_op(
+        monkeypatch,
+        [_result("", returncode=1, stderr="expired-session-secret was refused")],
+    )
+
+    with pytest.raises(OnePasswordError) as caught:
+        OnePasswordClient("account.example", "Mail").check()
+
+    message = str(caught.value)
+    assert "expired-session-secret" not in message
+    assert "locke onepassword authorize" in message
+
+
+def test_forget_session_deletes_only_the_account_scoped_credential(monkeypatch):
+    deleted = []
+    monkeypatch.setattr("locke.keystore.delete_credential", deleted.append)
+    client = OnePasswordClient("account.example", "Mail")
+
+    client.forget_session()
+
+    assert deleted == [client._session_credential]
