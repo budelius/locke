@@ -71,6 +71,7 @@ locke vault setup --interactive
 # Store a structured Login through the official op CLI (hidden password prompt)
 locke config set onepassword_account my.1password.com
 locke config set onepassword_vault Operations
+locke onepassword authorize  # interactive; bridges access to child/agent processes
 locke onepassword set myproject/staging/db --username admin \
   --setting host=db.example.com --setting port=5432
 
@@ -129,6 +130,14 @@ client.set_secret_pair(
 Set `LOCKE_ONEPASSWORD_ACCOUNT` / `LOCKE_ONEPASSWORD_VAULT`, or persist the
 same non-secret scope with `locke config set onepassword_account ...` and
 `locke config set onepassword_vault ...`.
+
+For non-interactive consumers that cannot share the desktop app's
+terminal-scoped authorization, run `locke onepassword authorize` directly in an
+unlocked human terminal. Locke verifies the configured vault and stores the
+short-lived session in the OS keystore without printing it; child `op` calls
+receive it only through their environment. Sessions expire after 30 minutes of
+inactivity. Rerun `authorize` after expiry, or remove it with
+`locke onepassword forget-session`. Plaintext settings never contain the token.
 
 ## OpenBao KV
 

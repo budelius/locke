@@ -231,6 +231,47 @@ def onepassword() -> None:
     """Manage structured Login items through the official 1Password CLI."""
 
 
+@onepassword.command("authorize")
+@click.option("--account", default=None, help="Override the configured 1Password account")
+@click.option("--vault", "vault_name", default=None, help="Override the configured vault")
+def onepassword_authorize(account: str | None, vault_name: str | None) -> None:
+    """Authorize non-interactive Locke consumers from this terminal.
+
+    Runs an interactive ``op signin``, verifies access to the explicitly
+    configured vault, and stores only the short-lived session token in Locke's
+    OS keystore. The token is never printed.
+    """
+    try:
+        from locke.onepassword import OnePasswordClient
+
+        client = OnePasswordClient.connect(account=account, vault=vault_name)
+        client.authorize()
+        click.echo(
+            f"authorized 1Password account {client.account!r} for vault {client.vault!r}; "
+            "session cached in the OS keystore",
+            err=True,
+        )
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
+@onepassword.command("forget-session")
+@click.option("--account", default=None, help="Override the configured 1Password account")
+@click.option("--vault", "vault_name", default=None, help="Override the configured vault")
+def onepassword_forget_session(account: str | None, vault_name: str | None) -> None:
+    """Delete Locke's cached 1Password session for one account."""
+    try:
+        from locke.onepassword import OnePasswordClient
+
+        client = OnePasswordClient.connect(account=account, vault=vault_name)
+        client.forget_session()
+        click.echo(f"forgot cached 1Password session for {client.account!r}", err=True)
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+
 @onepassword.command("get")
 @click.argument("path")
 @click.option("--account", default=None, help="Override the configured 1Password account")
