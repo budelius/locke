@@ -285,8 +285,10 @@ class TestVerifyWindowsHello:
     @patch("locke.keystore.platform")
     def test_non_interactive_skips_prompt(self, mock_platform, _sess, _interactive):
         mock_platform.system.return_value = "Windows"
-        # Should return True without attempting WinRT import or prompt
+        # Should return True without attempting WinRT import or prompt and cache
+        # that process-local decision so bulk writes warn only once.
         assert verify_windows_hello() is True
+        assert _bio_cache_valid() is True
 
     @patch("locke.keystore._is_interactive", return_value=True)
     @patch("locke.keystore._read_bio_session", return_value=False)

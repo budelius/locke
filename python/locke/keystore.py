@@ -535,6 +535,9 @@ def verify_windows_hello(
             "Shell cannot present Windows Hello (non-interactive or MSYS/Git Bash) — "
             "skipping the prompt. Keystore access proceeds without biometric gate."
         )
+        # Warm the process-local cache. Bulk/chunked operations call the gate
+        # repeatedly and would otherwise emit this warning once per key.
+        _bio_verified_at = time.monotonic()
         return True
 
     try:
