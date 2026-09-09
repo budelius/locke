@@ -352,6 +352,14 @@ Locke resolves credentials in priority order:
 Your application picks its own credential names (e.g.
 `MYAPP_CONFIG_ENCRYPTION_KEY`); Locke does not impose a namespace.
 
+## Windows Hello and Git Bash
+
+Native Windows shells retain Windows Hello gating. MSYS/Git Bash reports a
+console but cannot reliably complete the WinRT consent dialog; Locke detects
+that host before prompting, warns, and relies on the signed-in Windows user plus
+Credential Manager instead of waiting for the 120-second timeout. Run Locke
+from PowerShell or cmd when an explicit Windows Hello gate is required.
+
 ## Environment variables
 
 | Variable | Purpose |
