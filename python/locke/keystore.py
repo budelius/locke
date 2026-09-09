@@ -527,13 +527,13 @@ def verify_windows_hello(
         logger.debug("Not on Windows, skipping Windows Hello")
         return True
 
-    # Non-interactive shell: can't show a Windows Hello dialog.
-    # Allow keystore access ungated — the OS user session is the
-    # remaining security boundary (same as Linux/macOS behaviour).
+    # Non-interactive and MSYS/Git Bash hosts cannot reliably complete a
+    # Windows Hello dialog. Allow keystore access ungated — the OS user session
+    # is the remaining security boundary (same as Linux/macOS behaviour).
     if not _is_interactive():
         logger.warning(
-            "Non-interactive shell detected — skipping Windows Hello prompt. "
-            "Keystore access proceeds without biometric gate."
+            "Shell cannot present Windows Hello (non-interactive or MSYS/Git Bash) — "
+            "skipping the prompt. Keystore access proceeds without biometric gate."
         )
         return True
 
@@ -558,7 +558,7 @@ def verify_windows_hello(
     try:
         result = _run_async(UCV.request_verification_async(message))
     except Exception as exc:  # noqa: BLE001 -- converted to a typed BiometricDeniedError below
-        raise BiometricDeniedError(f"verification failed: {exc}")
+        raise BiometricDeniedError(f"failed: {exc}")
 
     if result == VerificationResult.VERIFIED:
         _bio_verified_at = time.monotonic()
@@ -585,6 +585,14 @@ def _is_interactive() -> bool:
         return False
 
     if platform.system() == "Windows":
+        # Python launched from MSYS2/Git Bash can report both a TTY and a
+        # console HWND even though WinRT's UserConsentVerifier dialog never
+        # completes in that host. Classify it before starting a 120-second
+        # prompt that can only time out. Native PowerShell/cmd/Windows Terminal
+        # sessions do not set MSYSTEM and retain Windows Hello gating.
+        if os.environ.get("MSYSTEM"):
+            return False
+
         import ctypes
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
         if not hwnd:
@@ -597,9 +605,9 @@ def _require_biometric() -> None:
     """Gate access behind biometric verification when enabled.
 
     No-op when biometric is disabled, on Linux, or when the cache is valid.
-    In non-interactive shells (no console window / stdin not a TTY),
-    skips the biometric prompt with a warning — keystore access proceeds
-    ungated, relying on the OS user session for protection.
+    In shells that cannot host Windows Hello (no console window, non-TTY, or
+    MSYS/Git Bash), skips the biometric prompt with a warning — keystore access
+    proceeds ungated, relying on the OS user session for protection.
     """
     if not _biometric_enabled():
         return

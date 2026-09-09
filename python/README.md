@@ -61,6 +61,9 @@ locke encrypt
 locke keystore set LOCKE_ENCRYPTION_KEY --prompt
 locke keystore get LOCKE_ENCRYPTION_KEY
 
+# On Windows, native shells use Windows Hello. MSYS/Git Bash cannot reliably
+# host that dialog, so Locke warns and uses the signed-in OS session boundary.
+
 # Get vault secret
 locke vault get myproject/staging/api_key
 

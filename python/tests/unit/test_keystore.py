@@ -95,6 +95,16 @@ class TestIsInteractive:
             mock_stdin.isatty.return_value = True
             assert _is_interactive() is True
 
+    @patch("locke.keystore.platform")
+    def test_windows_msys_tty_cannot_host_hello(self, mock_platform):
+        mock_platform.system.return_value = "Windows"
+        with (
+            patch.dict("os.environ", {"MSYSTEM": "MINGW64"}, clear=True),
+            patch("sys.stdin") as mock_stdin,
+        ):
+            mock_stdin.isatty.return_value = True
+            assert _is_interactive() is False
+
     @pytest.mark.skipif(
         platform.system() != "Windows",
         reason="ctypes.windll only available on Windows",
@@ -102,9 +112,13 @@ class TestIsInteractive:
     @patch("locke.keystore.platform")
     def test_windows_no_console_window(self, mock_platform):
         mock_platform.system.return_value = "Windows"
-        with patch("sys.stdin") as mock_stdin:
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.stdin") as mock_stdin,
+        ):
             mock_stdin.isatty.return_value = True
             import ctypes
+
             with patch.object(
                 ctypes.windll.kernel32, "GetConsoleWindow", return_value=0
             ):
@@ -117,9 +131,13 @@ class TestIsInteractive:
     @patch("locke.keystore.platform")
     def test_windows_with_console_window(self, mock_platform):
         mock_platform.system.return_value = "Windows"
-        with patch("sys.stdin") as mock_stdin:
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.stdin") as mock_stdin,
+        ):
             mock_stdin.isatty.return_value = True
             import ctypes
+
             with patch.object(
                 ctypes.windll.kernel32, "GetConsoleWindow", return_value=12345
             ):
