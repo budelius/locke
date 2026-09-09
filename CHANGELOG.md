@@ -61,8 +61,9 @@ across the Python, TypeScript, and Rust packages.
 
 - Interactive MSYS/Git Bash sessions on Windows no longer start a Windows Hello
   consent operation that cannot complete and then fail after 120 seconds. Locke
-  detects that host up front, emits the existing OS-session-boundary warning,
-  and leaves Windows Hello enabled for native shells.
+  detects that host up front, emits the OS-session-boundary warning once per
+  process (including bulk/chunked operations), and leaves Windows Hello enabled
+  for native shells.
 - `publish:crates` installs its dependencies again: this runner cannot let apt
   drop privileges to `_apt`, and apt exited 0 anyway, so the v0.10.0 release
   failed later at `jq: command not found` with npm and crates.io unpublished.
