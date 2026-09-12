@@ -1,5 +1,5 @@
 {
-  "name": "@martin-wieser/locke",
+  "name": "@budelius/locke",
   "version": "0.10.0",
   "author": "",
   "keywords": [
@@ -17,12 +17,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://gitlab.com/martin-wieser/locke.git"
+    "url": "git+https://gitlab.com/martin-wieser/locke.git"
   },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": "dist/cli/main.js",
+  "bin": {
+    "locke": "dist/cli/main.js"
+  },
   "files": [
     "dist",
     "README.md"

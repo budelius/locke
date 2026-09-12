@@ -5,6 +5,8 @@
  * Thin wrapper around library functions — no business logic here.
  */
 
+import { createRequire } from "node:module";
+
 import { Command } from "commander";
 
 import { loadConfig } from "../index.js";
@@ -17,12 +19,15 @@ import {
 import { buildVaultImportCommand } from "./vault_import.js";
 import { buildKeystoreCommand } from "./keystore.js";
 
+const require = createRequire(import.meta.url);
+const { version } = require("../../package.json") as { version: string };
+
 const program = new Command();
 
 program
   .name("locke")
   .description("Locke — Unified credentials framework.")
-  .version("0.1.0");
+  .version(version);
 
 program
   .command("env")

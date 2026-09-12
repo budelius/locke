@@ -5,7 +5,7 @@ Unified credentials framework — encrypted config, OS keystore, Vaultwarden int
 ## Install
 
 ```bash
-npm install
+npm install @budelius/locke
 ```
 
 ## Usage
@@ -19,7 +19,7 @@ import {
   getVaultSecret,
   getVaultSecretPair,
   setVaultSecretPair,
-} from 'locke';
+} from '@budelius/locke';
 
 // Load and decrypt config → flat env vars
 const env = await loadConfig('.locke/config.encrypted.json');

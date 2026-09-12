@@ -54,7 +54,7 @@ available on your Python environment's `PATH` (for example,
 ### TypeScript / Node
 
 ```bash
-npm install locke
+npm install @budelius/locke
 ```
 
 ### Rust
@@ -352,7 +352,7 @@ Your application picks its own credential names (e.g.
 ```
 locke/
 ├── python/        # Python package (locke on PyPI)
-├── typescript/    # TypeScript package (locke on npm)
+├── typescript/    # TypeScript package (@budelius/locke on npm)
 ├── rust/          # Rust crate (locke on crates.io)
 ├── test-vectors/  # Cross-language parity vectors
 ├── templates/     # Example config files + bootstrap guide

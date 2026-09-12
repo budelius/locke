@@ -2,7 +2,7 @@
 
 ## Quick Start (Humans)
 
-1. **Install Locke**: `pip install locke` / `npm install locke` / `cargo install locke`
+1. **Install Locke**: `pip install locke` / `npm install @budelius/locke` / `cargo install locke`
 2. **Store encryption key**: `locke keystore set {key_name} --prompt`
 3. **Load secrets**: `eval $(locke env)` or use the library API
 4. **Get vault secrets**: `locke vault get {project}/{tenant}/{name}`

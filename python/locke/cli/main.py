@@ -450,9 +450,10 @@ def _register_optional_commands() -> None:
     except ImportError:
         pass
     try:
-        from locke.cli.bio import bio
+        from locke.cli.bio import bio, unlock
 
         cli.add_command(bio)
+        cli.add_command(unlock)  # top-level `locke unlock` alias
     except ImportError:
         pass
 
