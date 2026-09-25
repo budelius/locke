@@ -383,3 +383,76 @@ def test_forget_session_deletes_only_the_account_scoped_credential(monkeypatch):
     client.forget_session()
 
     assert deleted == [client._session_credential]
+
+
+_OTP_URL = "otpauth://totp/mail.example.com:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=mail.example.com"
+
+
+def _otp_fields(payload):
+    return [field for field in payload["fields"] if field.get("type") == "OTP"]
+
+
+def test_login_payload_emits_one_otp_field_when_requested():
+    payload = OnePasswordClient._login_payload(
+        "path",
+        "user",
+        "secret",
+        url=None,
+        settings={},
+        tags=None,
+        otp=_OTP_URL,
+    )
+
+    assert _otp_fields(payload) == [
+        {"id": "locke_otp", "type": "OTP", "label": "one-time password", "value": _OTP_URL}
+    ]
+
+
+def test_login_payload_has_no_otp_field_by_default():
+    payload = OnePasswordClient._login_payload(
+        "path", "user", "secret", url=None, settings={}, tags=None
+    )
+
+    assert _otp_fields(payload) == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "otpauth://hotp/issuer:user?secret=JBSWY3DPEHPK3PXP",
+        "https://example.com/?secret=JBSWY3DPEHPK3PXP",
+        "JBSWY3DPEHPK3PXP",
+        "",
+    ],
+)
+def test_login_payload_rejects_non_totp_values_without_echoing_them(value):
+    with pytest.raises(ValueError) as caught:
+        OnePasswordClient._login_payload(
+            "path", "user", "secret", url=None, settings={}, tags=None, otp=value
+        )
+
+    assert "JBSWY3DPEHPK3PXP" not in str(caught.value)
+
+
+def test_set_secret_pair_sends_otp_only_over_stdin(monkeypatch):
+    path = "obachan/prod/users/user@example.com"
+    calls = _install_op(monkeypatch, [_result([]), _result({"id": "created"})])
+
+    OnePasswordClient("account.example", "Mail").set_secret_pair(
+        path, "user@example.com", "never-on-argv", otp=_OTP_URL
+    )
+
+    command, kwargs = calls[1]
+    assert _OTP_URL not in " ".join(command)
+    assert _otp_fields(json.loads(kwargs["input"]))[0]["value"] == _OTP_URL
+
+
+def test_module_level_pair_writer_forwards_otp(monkeypatch):
+    client = Mock()
+    monkeypatch.setattr(OnePasswordClient, "connect", classmethod(lambda cls: client))
+
+    from locke.onepassword import set_onepassword_secret_pair
+
+    set_onepassword_secret_pair("path", "user", "secret", otp=_OTP_URL)
+
+    client.set_secret_pair.assert_called_once_with("path", "user", "secret", otp=_OTP_URL)
