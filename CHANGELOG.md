@@ -7,6 +7,9 @@ across the Python, TypeScript, and Rust packages.
 
 ### Added
 
+- Python 1Password Login writes accept an optional `otp` (`otpauth://totp/` URL),
+  stored as a native one-time-password field so 1Password generates codes. Every
+  write replaces all fields, so callers must pass `otp` on each write to keep it.
 - Added `locke onepassword authorize` and `forget-session` to bridge an
   interactive, short-lived 1Password CLI session to non-interactive
   Locke/Obachan child processes through an account-scoped OS-keystore entry.
