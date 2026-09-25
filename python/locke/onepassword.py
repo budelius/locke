@@ -439,9 +439,13 @@ class OnePasswordClient:
         url: str | None,
         settings: dict[str, str],
         tags: list[str] | None,
+        otp: str | None = None,
     ) -> dict[str, Any]:
         if not path:
             raise ValueError("path must not be empty")
+        if otp is not None and not otp.startswith("otpauth://totp/"):
+            # Never echo the value: it carries the TOTP seed.
+            raise ValueError("otp must be an otpauth://totp/ URL")
         fields: list[dict[str, Any]] = [
             {
                 "id": "username",
@@ -466,6 +470,11 @@ class OnePasswordClient:
             },
         ]
         fields.extend(cls._settings_fields(settings))
+        if otp is not None:
+            # 1Password generates codes from an OTP field holding the otpauth URL.
+            fields.append(
+                {"id": "locke_otp", "type": "OTP", "label": "one-time password", "value": otp}
+            )
         payload: dict[str, Any] = {
             "title": path,
             "category": "LOGIN",
@@ -502,8 +511,13 @@ class OnePasswordClient:
         url: str | None = None,
         settings: dict[str, str] | None = None,
         tags: list[str] | None = None,
+        otp: str | None = None,
     ) -> str:
-        """Create or replace one Login item, sending the secret over stdin."""
+        """Create or replace one Login item, sending the secret over stdin.
+
+        The write replaces every field, so callers that want a one-time-password
+        field kept must pass ``otp`` on every write to the item.
+        """
         payload = self._login_payload(
             path,
             username,
@@ -511,6 +525,7 @@ class OnePasswordClient:
             url=url,
             settings=settings or {},
             tags=tags,
+            otp=otp,
         )
         item_id = self._find_item_id(path)
         if item_id is None:
@@ -536,6 +551,7 @@ class OnePasswordClient:
         url: str | None = None,
         settings: dict[str, str] | None = None,
         tags: list[str] | None = None,
+        otp: str | None = None,
     ) -> str:
         """Create or replace one structured username/password Login item."""
         return self.set_secret(
@@ -545,6 +561,7 @@ class OnePasswordClient:
             url=url,
             settings=settings,
             tags=tags,
+            otp=otp,
         )
 
 
