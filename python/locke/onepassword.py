@@ -1,13 +1,16 @@
 """1Password CLI-backed secret storage.
 
 This backend deliberately delegates authentication and encryption to the
-official ``op`` CLI.  Locke only builds and parses Login-item JSON.  Secret
-values are supplied to ``op item create/edit`` over stdin so they never appear
-in process arguments or shell history.
+official ``op`` CLI.  Locke writes only Login items but reads Login, Password
+and API Credential items, so keys stored through 1Password's own item types
+are usable without re-filing them.  Secret values are supplied to ``op item
+create/edit`` over stdin so they never appear in process arguments or shell
+history.
 
-Each Locke path maps to the exact title of one Login item in an explicitly
-configured 1Password account and vault.  Duplicate exact titles fail closed;
-Locke never updates an arbitrary match.
+Each Locke path maps to the exact title of one item in an explicitly
+configured 1Password account and vault.  Duplicate exact titles fail closed,
+across all readable categories; Locke never updates an arbitrary match and
+never rewrites a non-Login item as a Login item.
 """
 
 from __future__ import annotations
@@ -33,6 +36,11 @@ ONEPASSWORD_VAULT_VAR = "LOCKE_ONEPASSWORD_VAULT"
 _SETTINGS_SECTION_ID = "locke_settings"
 _SETTINGS_SECTION_LABEL = "Connection settings"
 _MANAGED_TAG = "locke-managed"
+# ``op item list --categories`` names of the item types Locke reads, and the
+# field id holding the secret in each item category (``op`` JSON spelling).
+_READABLE_CATEGORIES = ("Login", "Password", "API Credential")
+_SECRET_FIELD_IDS = {"LOGIN": "password", "PASSWORD": "password", "API_CREDENTIAL": "credential"}
+_WRITABLE_CATEGORY = "LOGIN"
 _FIELD_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_. -]{0,63}$")
 _SESSION_CREDENTIAL_PREFIX = "LOCKE_ONEPASSWORD_SESSION_"
 _OP_FIXED_AUTH_VARS = frozenset(
@@ -74,7 +82,7 @@ def _without_op_auth(environment: dict[str, str]) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class OnePasswordItem:
-    """Decrypted fields from one Locke-managed 1Password Login item."""
+    """Decrypted fields from one 1Password Login, Password or API Credential item."""
 
     title: str
     username: str | None
@@ -84,7 +92,7 @@ class OnePasswordItem:
 
 
 class OnePasswordClient:
-    """Idempotent Login-item client using the official ``op`` executable."""
+    """Idempotent item client using the official ``op`` executable."""
 
     def __init__(self, account: str, vault: str) -> None:
         if not account:
@@ -238,14 +246,21 @@ class OnePasswordClient:
         except json.JSONDecodeError as exc:
             raise OnePasswordError(operation, "the op CLI returned invalid JSON") from exc
 
-    def _list_login_items(
+    def _list_items(
         self,
         *,
         session_token: str | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._run_json(
             "list items",
-            ["item", "list", "--vault", self.vault, "--categories", "Login"],
+            [
+                "item",
+                "list",
+                "--vault",
+                self.vault,
+                "--categories",
+                ",".join(_READABLE_CATEGORIES),
+            ],
             session_token=session_token,
         )
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -254,7 +269,7 @@ class OnePasswordClient:
 
     def check(self) -> None:
         """Prove the configured account/vault is readable without revealing items."""
-        self._list_login_items()
+        self._list_items()
 
     def check_path(self, path: str) -> bool:
         """Preflight account/vault access and exact-title uniqueness."""
@@ -307,7 +322,7 @@ class OnePasswordClient:
 
         # Verify both account authentication and exact configured-vault access
         # before persisting the bearer token.
-        self._list_login_items(session_token=token)
+        self._list_items(session_token=token)
 
         from locke.errors import LockeError
         from locke.keystore import set_credential
@@ -345,20 +360,24 @@ class OnePasswordClient:
                 "unexpected failure while deleting the cached session",
             ) from exc
 
-    def _find_item_id(self, path: str) -> str | None:
-        rows = self._list_login_items()
+    def _find_item(self, path: str) -> dict[str, Any] | None:
+        rows = self._list_items()
         matches = [row for row in rows if row.get("title") == path]
         if len(matches) > 1:
             raise OnePasswordError(
                 "find item",
-                f"multiple Login items have the exact title {path!r} in vault {self.vault!r}",
+                f"multiple items have the exact title {path!r} in vault {self.vault!r}",
             )
         if not matches:
             return None
         item_id = matches[0].get("id")
         if not isinstance(item_id, str) or not item_id:
             raise OnePasswordError("find item", "the matching item has no valid id")
-        return item_id
+        return matches[0]
+
+    def _find_item_id(self, path: str) -> str | None:
+        row = self._find_item(path)
+        return None if row is None else row["id"]
 
     def _get_item_json(self, item_id: str) -> dict[str, Any]:
         payload = self._run_json(
@@ -383,7 +402,11 @@ class OnePasswordClient:
         if not isinstance(title, str) or not title:
             raise OnePasswordError("get item", "the op CLI item has no valid title")
         username = OnePasswordClient._field_value(payload, field_id="username")
-        password = OnePasswordClient._field_value(payload, field_id="password") or ""
+        category = payload.get("category", _WRITABLE_CATEGORY)
+        secret_field = _SECRET_FIELD_IDS.get(category)
+        if secret_field is None:
+            raise OnePasswordError("get item", f"unsupported 1Password item category {category!r}")
+        password = OnePasswordClient._field_value(payload, field_id=secret_field) or ""
         settings: dict[str, str] = {}
         for field in payload.get("fields", []):
             if not isinstance(field, dict):
@@ -487,7 +510,7 @@ class OnePasswordClient:
         return payload
 
     def get_item(self, path: str) -> OnePasswordItem:
-        """Return one exact-title Login item with its structured settings."""
+        """Return one exact-title item with its structured settings."""
         item_id = self._find_item_id(path)
         if item_id is None:
             raise SecretNotFoundError(path)
@@ -527,17 +550,23 @@ class OnePasswordClient:
             tags=tags,
             otp=otp,
         )
-        item_id = self._find_item_id(path)
-        if item_id is None:
+        existing = self._find_item(path)
+        if existing is None:
             self._run_json(
                 "create item",
                 ["item", "create", "--vault", self.vault, "-"],
                 stdin_payload=payload,
             )
             return "created"
+        if existing.get("category", _WRITABLE_CATEGORY) != _WRITABLE_CATEGORY:
+            # Editing would replace the item's typed fields with Login fields.
+            raise OnePasswordError(
+                "edit item",
+                f"{path!r} is a {existing.get('category')} item; Locke only writes Login items",
+            )
         self._run_json(
             "edit item",
-            ["item", "edit", item_id, "--vault", self.vault],
+            ["item", "edit", existing["id"], "--vault", self.vault],
             stdin_payload=payload,
         )
         return "updated"

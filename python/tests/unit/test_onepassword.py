@@ -111,6 +111,97 @@ def test_get_item_returns_pair_url_and_structured_settings(monkeypatch):
     assert "--reveal" in calls[1][0]
 
 
+def test_get_reads_the_credential_of_an_api_credential_item(monkeypatch):
+    path = "API Credentials"
+    calls = _install_op(
+        monkeypatch,
+        [
+            _result([{"id": "api-1", "title": path, "category": "API_CREDENTIAL"}]),
+            _result(
+                {
+                    "id": "api-1",
+                    "title": path,
+                    "category": "API_CREDENTIAL",
+                    "fields": [
+                        {"id": "username", "value": "Kernity API KEY for notion"},
+                        {"id": "credential", "value": "ntn_example"},
+                        {"id": "hostname", "value": ""},
+                    ],
+                }
+            ),
+        ],
+    )
+
+    item = OnePasswordClient("account.example", "Private").get_item(path)
+
+    assert item.password == "ntn_example"
+    assert item.username == "Kernity API KEY for notion"
+    list_command = calls[0][0]
+    categories = list_command[list_command.index("--categories") + 1]
+    assert categories == "Login,Password,API Credential"
+
+
+def test_get_reads_the_password_of_a_password_item(monkeypatch):
+    _install_op(
+        monkeypatch,
+        [
+            _result([{"id": "pw-1", "title": "wifi", "category": "PASSWORD"}]),
+            _result(
+                {
+                    "id": "pw-1",
+                    "title": "wifi",
+                    "category": "PASSWORD",
+                    "fields": [{"id": "password", "value": "pw-secret"}],
+                }
+            ),
+        ],
+    )
+
+    assert OnePasswordClient("account.example", "Private").get_secret("wifi") == "pw-secret"
+
+
+def test_unknown_item_category_fails_closed(monkeypatch):
+    _install_op(
+        monkeypatch,
+        [
+            _result([{"id": "x", "title": "card"}]),
+            _result({"id": "x", "title": "card", "category": "CREDIT_CARD", "fields": []}),
+        ],
+    )
+
+    with pytest.raises(OnePasswordError, match="unsupported 1Password item category"):
+        OnePasswordClient("account.example", "Private").get_secret("card")
+
+
+def test_set_refuses_to_rewrite_a_non_login_item(monkeypatch):
+    calls = _install_op(
+        monkeypatch,
+        [_result([{"id": "api-1", "title": "API Credentials", "category": "API_CREDENTIAL"}])],
+    )
+
+    with pytest.raises(OnePasswordError, match="only writes Login items"):
+        OnePasswordClient("account.example", "Private").set_secret("API Credentials", "x")
+
+    assert len(calls) == 1
+
+
+def test_duplicate_titles_across_categories_fail_closed(monkeypatch):
+    _install_op(
+        monkeypatch,
+        [
+            _result(
+                [
+                    {"id": "one", "title": "dup", "category": "LOGIN"},
+                    {"id": "two", "title": "dup", "category": "API_CREDENTIAL"},
+                ]
+            )
+        ],
+    )
+
+    with pytest.raises(OnePasswordError, match="multiple items"):
+        OnePasswordClient("account.example", "Private").get_secret("dup")
+
+
 def test_check_path_preflights_scope_and_exact_title(monkeypatch):
     path = "obachan/prod/users/user@example.com"
     calls = _install_op(monkeypatch, [_result([{"id": "item-1", "title": path}])])
@@ -137,7 +228,7 @@ def test_duplicate_exact_titles_fail_closed(monkeypatch):
         [_result([{"id": "one", "title": path}, {"id": "two", "title": path}])],
     )
 
-    with pytest.raises(OnePasswordError, match="multiple Login items"):
+    with pytest.raises(OnePasswordError, match="multiple items"):
         OnePasswordClient("account.example", "Mail").set_secret(path, "secret")
 
 

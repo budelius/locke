@@ -228,7 +228,7 @@ def vault_set(
 
 @cli.group(name="onepassword")
 def onepassword() -> None:
-    """Manage structured Login items through the official 1Password CLI."""
+    """Read and write 1Password items through the official 1Password CLI."""
 
 
 @onepassword.command("authorize")
@@ -280,7 +280,7 @@ def onepassword_forget_session(account: str | None, vault_name: str | None) -> N
     "--field",
     type=click.Choice(["password", "username", "both", "url", "settings"]),
     default="password",
-    help="Which part of the Login item to print",
+    help="Which part of the item to print (password: an API Credential's credential)",
 )
 def onepassword_get(
     path: str,
@@ -288,7 +288,7 @@ def onepassword_get(
     vault_name: str | None,
     field: str,
 ) -> None:
-    """Retrieve an exact-title Login item from 1Password."""
+    """Retrieve an exact-title Login, Password or API Credential item from 1Password."""
     try:
         from locke.onepassword import OnePasswordClient
 
