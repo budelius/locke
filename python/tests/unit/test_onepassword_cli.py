@@ -89,6 +89,7 @@ def test_onepassword_authorize_reports_scope_without_printing_token():
         account="my.1password.com",
         vault="pseekoo",
     )
+    client.authorize.return_value = "session-cached"
 
     with patch("locke.onepassword.OnePasswordClient.connect", return_value=client):
         result = CliRunner().invoke(cli, ["onepassword", "authorize"])
@@ -98,6 +99,18 @@ def test_onepassword_authorize_reports_scope_without_printing_token():
     assert "pseekoo" in result.output
     assert "session cached in the OS keystore" in result.output
     client.authorize.assert_called_once_with()
+
+
+def test_onepassword_authorize_explains_app_integration():
+    client = Mock(account="my.1password.com", vault="Private")
+    client.authorize.return_value = "app-integration"
+
+    with patch("locke.onepassword.OnePasswordClient.connect", return_value=client):
+        result = CliRunner().invoke(cli, ["onepassword", "authorize"])
+
+    assert result.exit_code == 0, result.output
+    assert "CLI integration is active" in result.output
+    assert "session cached" not in result.output
 
 
 def test_onepassword_forget_session_uses_explicit_account_scope():

@@ -275,12 +275,20 @@ class OnePasswordClient:
         """Preflight account/vault access and exact-title uniqueness."""
         return self._find_item_id(path) is not None
 
-    def authorize(self) -> None:
+    def authorize(self) -> str:
         """Cache an interactive ``op signin`` session after verifying the vault.
 
         The short-lived token is captured in memory, verified against the
         configured account/vault, and stored only in Locke's OS keystore. It is
         never printed, passed on argv, or written to plaintext settings.
+
+        With the desktop app's CLI integration, ``op signin --raw`` succeeds
+        with no output: there is no session token, and every ``op`` call asks
+        the unlocked app instead. Then the vault is verified through the app,
+        any stale cached session is dropped (it would override the app for
+        non-interactive callers), and nothing is stored.
+
+        Returns ``"session-cached"`` or ``"app-integration"``.
         """
         if not sys.stdin.isatty():
             raise OnePasswordError(
@@ -317,7 +325,11 @@ class OnePasswordClient:
                 "interactive sign-in failed; run this command directly in an unlocked terminal",
             )
         token = result.stdout.strip()
-        if not token or any(character.isspace() for character in token):
+        if not token:
+            self._list_items()
+            self.forget_session()
+            return "app-integration"
+        if any(character.isspace() for character in token):
             raise OnePasswordError("authorize", "the op CLI returned an invalid session token")
 
         # Verify both account authentication and exact configured-vault access
@@ -340,6 +352,7 @@ class OnePasswordClient:
                 "authorize",
                 "unexpected failure while storing the session",
             ) from exc
+        return "session-cached"
 
     def forget_session(self) -> None:
         """Delete this account's cached session from Locke's OS keystore."""

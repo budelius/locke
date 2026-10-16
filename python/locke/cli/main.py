@@ -245,10 +245,17 @@ def onepassword_authorize(account: str | None, vault_name: str | None) -> None:
         from locke.onepassword import OnePasswordClient
 
         client = OnePasswordClient.connect(account=account, vault=vault_name)
-        client.authorize()
+        mode = client.authorize()
+        if mode == "app-integration":
+            detail = (
+                "the 1Password app's CLI integration is active, so there is no session to "
+                "cache; Locke reads through the app while it is unlocked"
+            )
+        else:
+            detail = "session cached in the OS keystore"
         click.echo(
             f"authorized 1Password account {client.account!r} for vault {client.vault!r}; "
-            "session cached in the OS keystore",
+            f"{detail}",
             err=True,
         )
     except Exception as exc:

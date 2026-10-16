@@ -390,7 +390,7 @@ def test_authorize_verifies_vault_then_stores_session_without_argv_disclosure(mo
     )
     client = OnePasswordClient("account.example", "Mail")
 
-    client.authorize()
+    assert client.authorize() == "session-cached"
 
     signin_command, signin_kwargs = calls[0]
     assert signin_command[1:] == ["signin", "--account", "account.example", "--raw"]
@@ -402,6 +402,45 @@ def test_authorize_verifies_vault_then_stores_session_without_argv_disclosure(mo
     assert "short-lived-session-secret" not in verify_command
     assert verify_kwargs["env"]["OP_SESSION"] == "short-lived-session-secret"
     assert stored == [(client._session_credential, "short-lived-session-secret")]
+
+
+def test_authorize_with_app_integration_verifies_vault_and_stores_nothing(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: True),
+    )
+    # The desktop app's CLI integration: sign-in succeeds with empty output.
+    calls = _install_op(monkeypatch, [_result(""), _result([])])
+    store = Mock(side_effect=AssertionError("no token exists to store"))
+    monkeypatch.setattr("locke.keystore.set_credential", store)
+    deleted = []
+    monkeypatch.setattr("locke.keystore.delete_credential", deleted.append)
+    client = OnePasswordClient("account.example", "Private")
+
+    assert client.authorize() == "app-integration"
+
+    verify_command, verify_kwargs = calls[1]
+    assert verify_command[1:3] == ["item", "list"]
+    assert "OP_SESSION" not in verify_kwargs["env"]
+    store.assert_not_called()
+    assert deleted == [client._session_credential]
+
+
+def test_authorize_with_app_integration_fails_when_vault_is_unreadable(monkeypatch):
+    _clear_op_auth(monkeypatch)
+    monkeypatch.setattr(
+        "locke.onepassword.sys.stdin",
+        SimpleNamespace(isatty=lambda: True),
+    )
+    _install_op(monkeypatch, [_result(""), _result("", returncode=1)])
+    deleted = []
+    monkeypatch.setattr("locke.keystore.delete_credential", deleted.append)
+
+    with pytest.raises(OnePasswordError):
+        OnePasswordClient("account.example", "Private").authorize()
+
+    assert deleted == []
 
 
 def test_authorize_does_not_store_session_when_vault_preflight_fails(monkeypatch):
