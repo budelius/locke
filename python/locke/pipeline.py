@@ -159,6 +159,19 @@ def _is_glab_auth_token_name(name: str) -> bool:
     return not words & _NOT_A_TOKEN
 
 
+def _as_glab_token(stdout: str) -> str | None:
+    """Return ``stdout`` as a token only if it is one whitespace-free line.
+
+    glab versions without an ``auth token`` subcommand print the ``glab auth``
+    help page to stdout and exit 0, and a logged-out glab prints a "no token
+    found" message. Neither is a credential; a token never contains whitespace.
+    """
+    value = stdout.strip()
+    if not value or any(char.isspace() for char in value):
+        return None
+    return value
+
+
 def _resolve_from_glab(name: str) -> str | None:
     """Attempt to resolve credential from GitLab CLI (`glab`).
 
@@ -211,7 +224,10 @@ def _resolve_from_glab(name: str) -> str | None:
                 timeout=10,
                 check=False,  # a non-zero exit just means "not logged in"
             )
-            if result.returncode == 0 and result.stdout.strip():
+            token = _as_glab_token(result.stdout) if result.returncode == 0 else None
+            if result.returncode == 0 and token is None:
+                logger.debug("`glab auth token` printed something that is not a token")
+            if token:
                 # Loud on purpose. This backend is not name-addressed, so an
                 # answer here means a stronger source (keystore, env) missed --
                 # exactly the condition that went unnoticed for ~10h during the
@@ -223,7 +239,7 @@ def _resolve_from_glab(name: str) -> str | None:
                     "answer. Verify this is really the credential you want.",
                     name,
                 )
-                return result.stdout.strip()
+                return token
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 

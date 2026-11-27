@@ -118,6 +118,47 @@ class TestBiometricFallback:
             assert cred.source == "env_var"
 
 
+class TestGlabAuthTokenShape:
+    """`glab auth token` output is a credential only if it looks like one.
+
+    Regression: glab 1.130 has no ``auth token`` subcommand; it prints the
+    ``glab auth`` help page to stdout and exits 0, and Locke returned that
+    26-line page as OBACHAN_STAGING_GITLAB_TOKEN (2026-11-26).
+    """
+
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            (
+                "\n  Manages authentication for glab against one or more GitLab instances.\n"
+                "  USAGE\n    glab auth <command> [command] [--flags]\n"
+            ),
+            "! No token found (checked config file, keyring, and environment variables).\n",
+            "",
+            "   \n",
+        ],
+    )
+    def test_non_token_output_is_refused(self, stdout):
+        from unittest.mock import Mock
+
+        from locke.pipeline import _resolve_from_glab
+
+        def run(cmd, **kwargs):
+            if cmd[:3] == ["glab", "auth", "token"]:
+                return Mock(returncode=0, stdout=stdout)
+            return Mock(returncode=1, stdout="")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("shutil.which", return_value="/usr/bin/glab"))
+            stack.enter_context(patch("subprocess.run", side_effect=run))
+            assert _resolve_from_glab("OBACHAN_STAGING_GITLAB_TOKEN") is None
+
+    def test_a_single_token_line_still_resolves(self):
+        from locke.pipeline import _as_glab_token
+
+        assert _as_glab_token("glpat-abc_DEF-123\n") == "glpat-abc_DEF-123"
+
+
 class TestGlabAuthTokenScope:
     """`glab auth token` is name-blind — it must only answer GitLab names.
 
