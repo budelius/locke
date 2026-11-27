@@ -33,6 +33,19 @@ async function resolveFromEnv(name: string): Promise<string | null> {
   return process.env[name] ?? null;
 }
 
+/**
+ * Return glab's stdout as a token only if it is one whitespace-free line.
+ *
+ * glab versions without an `auth token` subcommand print the `glab auth` help
+ * page to stdout and exit 0, and a logged-out glab prints a "no token found"
+ * message. Neither is a credential; a token never contains whitespace.
+ */
+export function asGlabToken(stdout: string): string | null {
+  const value = stdout.trim();
+  if (!value || /\s/.test(value)) return null;
+  return value;
+}
+
 async function resolveFromGlab(name: string): Promise<string | null> {
   const { execFileSync } = await import("node:child_process");
   const { existsSync } = await import("node:fs");
@@ -64,7 +77,8 @@ async function resolveFromGlab(name: string): Promise<string | null> {
         timeout: 10000,
         encoding: "utf8",
       });
-      if (result.trim()) return result.trim();
+      const token = asGlabToken(result);
+      if (token) return token;
     } catch {
       // fall through
     }
